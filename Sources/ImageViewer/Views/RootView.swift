@@ -41,7 +41,7 @@ struct RootView: View {
     }
 
     func openFolder() async {
-        guard let urls = await FolderScanner.openPanelAndScan() else {
+        guard let result = await FolderScanner.openPanelAndScan() else {
             // User cancelled — stay on whatever is currently showing
             NSApp.activate(ignoringOtherApps: true)
             NSApp.windows.first?.makeKeyAndOrderFront(nil)
@@ -53,11 +53,11 @@ struct RootView: View {
 
         state.zoomScale = 1.0
         state.panOffset = .zero
-        state.noImagesFound = urls.isEmpty
+        state.noImagesFound = result.images.isEmpty
         state.folderVersion += 1
-        await state.loadImages(urls)
+        await state.loadImages(result.images, from: result.folder)
         withAnimation {
-            state.viewMode = urls.isEmpty ? .folderPicker : .gallery
+            state.viewMode = result.images.isEmpty ? .folderPicker : .gallery
         }
     }
 }

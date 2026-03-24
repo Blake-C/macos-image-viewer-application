@@ -46,6 +46,9 @@ final class AppState: ObservableObject {
     // Original unsorted URLs so re-sorting is always clean
     private var unsortedURLs: [URL] = []
 
+    // Last opened folder, kept for refresh
+    private(set) var currentFolder: URL?
+
     private var keyMonitor: Any?
     private var scrollMonitor: Any?
 
@@ -60,9 +63,18 @@ final class AppState: ObservableObject {
 
     // MARK: - Folder loading
 
-    func loadImages(_ urls: [URL]) async {
+    func loadImages(_ urls: [URL], from folder: URL? = nil) async {
+        if let folder { currentFolder = folder }
         unsortedURLs = urls
         await applyCurrentSort(resetSelection: true)
+    }
+
+    func refreshCurrentFolder() async {
+        guard let folder = currentFolder else { return }
+        let urls = FolderScanner.scan(directory: folder)
+        unsortedURLs = urls
+        folderVersion += 1
+        await applyCurrentSort(resetSelection: false)
     }
 
     @MainActor

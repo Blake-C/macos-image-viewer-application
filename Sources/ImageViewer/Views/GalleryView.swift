@@ -2,6 +2,7 @@ import SwiftUI
 
 struct GalleryView: View {
     @EnvironmentObject var state: AppState
+    @State private var isRefreshing = false
 
     private let columns = [GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 8)]
 
@@ -85,6 +86,26 @@ struct GalleryView: View {
                 }
                 .buttonStyle(.plain)
                 .help(state.squareThumbnails ? "Switch to aspect ratio thumbnails" : "Switch to square thumbnails")
+
+                // Refresh button
+                Button {
+                    guard !isRefreshing else { return }
+                    isRefreshing = true
+                    Task {
+                        await state.refreshCurrentFolder()
+                        isRefreshing = false
+                    }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.white)
+                        .rotationEffect(.degrees(isRefreshing ? 360 : 0))
+                        .animation(isRefreshing ? .linear(duration: 0.6).repeatForever(autoreverses: false) : .default, value: isRefreshing)
+                        .padding(8)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+                .help("Refresh folder")
             }
             .padding(.top, 10)
             .padding(.trailing, 12)

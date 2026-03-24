@@ -7,8 +7,8 @@ enum FolderScanner {
         "tiff", "tif", "bmp", "webp", "avif"
     ]
 
-    /// Returns nil if the user cancelled, or the list of image URLs (possibly empty) if they confirmed.
-    static func openPanelAndScan() async -> [URL]? {
+    /// Returns nil if the user cancelled, or (folder, images) if they confirmed.
+    static func openPanelAndScan() async -> (folder: URL, images: [URL])? {
         await MainActor.run {
             let panel = NSOpenPanel()
             panel.canChooseFiles = false
@@ -23,14 +23,14 @@ enum FolderScanner {
 }
 
 private extension NSOpenPanel {
-    func run() async -> [URL]? {
+    func run() async -> (folder: URL, images: [URL])? {
         await withCheckedContinuation { continuation in
             self.begin { response in
                 guard response == .OK, let url = self.url else {
                     continuation.resume(returning: nil) // cancelled
                     return
                 }
-                continuation.resume(returning: FolderScanner.scan(directory: url))
+                continuation.resume(returning: (url, FolderScanner.scan(directory: url)))
             }
         }
     }
