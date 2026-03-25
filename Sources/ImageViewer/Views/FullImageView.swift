@@ -5,39 +5,61 @@ struct FullImageView: View {
     @EnvironmentObject var state: AppState
 
     @State private var fullImage: NSImage?
-    @State private var isLoading = true
+    @State private var outgoingImage: NSImage?          // previous image during crossfade
+    @State private var outgoingZoom: CGFloat   = 1.0   // captured at transition start
+    @State private var outgoingOffset: CGSize  = .zero  // captured at transition start
+    @State private var transitionOpacity: Double = 1.0  // 0 = outgoing fully visible, 1 = incoming
+
+    @State private var isLoading  = true
     @State private var dragLive: CGSize = .zero
     @State private var imageInfo: ImageInfo? = nil
 
+    // Ken Burns local state — keeps animation separate from state.zoomScale/panOffset
+    // so that flipping kenBurnsActive to false instantly snaps the displayed zoom to fit.
+    @State private var kbZoom: CGFloat = 1.0
+    @State private var kbPan: CGSize = .zero
+    @State private var kenBurnsActive: Bool = false
+
     var currentURL: URL { state.imageURLs[state.selectedIndex] }
+
+    // Effective zoom/pan accounting for whether Ken Burns owns the transform
+    private var effectiveZoom: CGFloat { kenBurnsActive ? kbZoom : state.zoomScale }
+    private var effectivePan: CGSize {
+        kenBurnsActive ? kbPan : state.panOffset
+    }
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            if isLoading {
-                ProgressView()
-                    .scaleEffect(1.5)
-            } else if let img = fullImage {
-                GeometryReader { geo in
-                    Image(nsImage: img)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .scaleEffect(state.zoomScale)
-                        .offset(
-                            x: state.panOffset.width + dragLive.width,
-                            y: state.panOffset.height + dragLive.height
-                        )
-                        .allowsHitTesting(false)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .onAppear {
-                            state.fullImageViewSize = geo.size
-                        }
-                        .onChange(of: geo.size) { _, size in
-                            state.fullImageViewSize = size
-                        }
-                }
-            } else {
+            // --- Outgoing image (frozen during crossfade) ---
+            if let outgoing = outgoingImage {
+                Image(nsImage: outgoing)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .scaleEffect(outgoingZoom)
+                    .offset(x: outgoingOffset.width, y: outgoingOffset.height)
+                    .allowsHitTesting(false)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .opacity(1.0 - transitionOpacity)
+            }
+
+            // --- Incoming / current image ---
+            if let img = fullImage {
+                Image(nsImage: img)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .scaleEffect(effectiveZoom)
+                    .offset(
+                        x: effectivePan.width  + dragLive.width,
+                        y: effectivePan.height + dragLive.height
+                    )
+                    .allowsHitTesting(false)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .opacity(transitionOpacity)
+            } else if isLoading && outgoingImage == nil {
+                ProgressView().scaleEffect(1.5)
+            } else if outgoingImage == nil {
                 VStack(spacing: 12) {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.system(size: 48))
@@ -52,8 +74,13 @@ struct FullImageView: View {
             MouseEventHandler(
                 onDragLive: { offset in dragLive = offset },
                 onDragEnd:  { offset in
-                    state.panOffset.width  += offset.width
-                    state.panOffset.height += offset.height
+                    if kenBurnsActive {
+                        kbPan.width  += offset.width
+                        kbPan.height += offset.height
+                    } else {
+                        state.panOffset.width  += offset.width
+                        state.panOffset.height += offset.height
+                    }
                     dragLive = .zero
                 },
                 onTap: { state.handleTapInFullImage() }
@@ -62,18 +89,14 @@ struct FullImageView: View {
             // Nav arrows
             NavArrow(direction: .prev)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                .allowsHitTesting(true)
 
             NavArrow(direction: .next)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-                .allowsHitTesting(true)
 
-            // Top-right controls: star + info toggle
+            // Top-right buttons: star + info
             VStack {
                 HStack(spacing: 8) {
                     Spacer()
-
-                    // Favorites toggle
                     Button {
                         state.toggleFavorite(currentURL)
                     } label: {
@@ -86,7 +109,6 @@ struct FullImageView: View {
                     .buttonStyle(.plain)
                     .help(state.isFavorite(currentURL) ? "Remove from favorites" : "Add to favorites")
 
-                    // Info overlay toggle
                     Button {
                         state.showInfoOverlay.toggle()
                     } label: {
@@ -101,10 +123,8 @@ struct FullImageView: View {
                 }
                 .padding(.top, 12)
                 .padding(.trailing, 12)
-
                 Spacer()
             }
-            .allowsHitTesting(true)
             .zIndex(2)
 
             // Info overlay (bottom-left)
@@ -131,27 +151,130 @@ struct FullImageView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        // Capture view size for Ken Burns / zoom-to-pixels calculations
+        .background(
+            GeometryReader { geo in
+                Color.clear
+                    .onAppear { state.fullImageViewSize = geo.size }
+                    .onChange(of: geo.size) { _, size in state.fullImageViewSize = size }
+            }
+        )
         .animation(.easeInOut(duration: 0.2), value: state.showInfoOverlay)
         .animation(.easeInOut(duration: 0.2), value: state.slideshowActive)
         .ignoresSafeArea()
+        // Stop Ken Burns when slideshow stops
+        .onChange(of: state.slideshowActive) { _, active in
+            if !active { cancelKenBurns() }
+        }
+        // Stop Ken Burns when toggled off
+        .onChange(of: state.kenBurnsEnabled) { _, enabled in
+            if !enabled { cancelKenBurns() }
+        }
         .task(id: currentURL) {
-            isLoading = true
-            state.zoomScale = 1.0
-            state.panOffset = .zero
-            dragLive = .zero
+            // Consume the transition flag — was this an auto-advance or manual navigation?
+            let isCrossfade = state.isSlideshowTransition
+            state.isSlideshowTransition = false
+
+            if isCrossfade, let current = fullImage {
+                // Freeze the outgoing image at its current effective zoom/offset
+                outgoingImage  = current
+                outgoingZoom   = effectiveZoom
+                outgoingOffset = CGSize(
+                    width:  effectivePan.width  + dragLive.width,
+                    height: effectivePan.height + dragLive.height
+                )
+                transitionOpacity = 0.0   // show outgoing while loading
+            } else {
+                outgoingImage     = nil
+                transitionOpacity = 1.0
+            }
+
+            isLoading = (outgoingImage == nil)   // show spinner only when no outgoing
+            dragLive  = .zero
             imageInfo = nil
 
+            // Stop any previous Ken Burns before loading new image
+            kenBurnsActive = false
+            kbZoom = 1.0
+            kbPan  = .zero
+
+            // Load image, info and pixel size concurrently
             async let img       = ImageLoader.fullImage(for: currentURL)
             async let info      = ImageInfo.load(for: currentURL)
             async let pixelSize = ImageLoader.pixelSize(for: currentURL)
-
             let (loadedImg, loadedInfo, loadedPixelSize) = await (img, info, pixelSize)
 
-            fullImage = loadedImg
             imageInfo = loadedInfo
             state.currentImagePixelSize = loadedPixelSize
+
+            // --- Ken Burns: set start state before revealing the image ---
+            let doKenBurns = state.kenBurnsEnabled && state.slideshowActive
+            var kbDuration: Double = 0
+            if doKenBurns,
+               let ps = loadedPixelSize,
+               ps.width > 0, ps.height > 0,
+               state.fullImageViewSize.width > 0, state.fullImageViewSize.height > 0 {
+
+                let vw = state.fullImageViewSize.width
+                let vh = state.fullImageViewSize.height
+                let startZoom: CGFloat = 1.6
+                let isPortrait = (ps.width / ps.height) < (vw / vh)
+                let startOffset: CGSize = isPortrait
+                    ? CGSize(width: 0,  height:  vh * (startZoom - 1) / 2)
+                    : CGSize(width: vw * (startZoom - 1) / 2, height: 0)
+
+                // Set local Ken Burns state (not state.zoomScale)
+                kbZoom = startZoom
+                kbPan  = startOffset
+                kenBurnsActive = true
+                kbDuration = max(1.0, state.slideshowInterval - 0.3)
+
+                // Reset state zoom to fit so it's ready when Ken Burns ends
+                state.zoomScale = 1.0
+                state.panOffset = .zero
+            } else {
+                kenBurnsActive = false
+                state.zoomScale = 1.0
+                state.panOffset = .zero
+            }
+
+            fullImage = loadedImg
             isLoading = false
+
+            // --- Crossfade: fade incoming image in over outgoing ---
+            if isCrossfade {
+                let fadeDuration = min(0.7, state.slideshowInterval * 0.25)
+                withAnimation(.easeInOut(duration: fadeDuration)) {
+                    transitionOpacity = 1.0
+                }
+                // Remove outgoing layer once fade is done
+                let cleanupDelay = UInt64((fadeDuration + 0.05) * 1_000_000_000)
+                Task { [weak state] in
+                    try? await Task.sleep(nanoseconds: cleanupDelay)
+                    _ = state   // suppress warning
+                    await MainActor.run { outgoingImage = nil }
+                }
+            }
+
+            // --- Ken Burns: animate local kbZoom/kbPan to fit over the slideshow interval ---
+            if doKenBurns && kbDuration > 0 {
+                withAnimation(.easeInOut(duration: kbDuration)) {
+                    kbZoom = 1.0
+                    kbPan  = .zero
+                }
+            }
         }
+    }
+
+    /// Instantly cancels Ken Burns animation and snaps to fit.
+    /// Because kenBurnsActive is a Bool (not an animated numeric), flipping it to false
+    /// causes an immediate view update that reads state.zoomScale (already 1.0).
+    private func cancelKenBurns() {
+        kenBurnsActive = false
+        kbZoom = 1.0
+        kbPan  = .zero
+        outgoingImage = nil
+        transitionOpacity = 1.0
     }
 }
 

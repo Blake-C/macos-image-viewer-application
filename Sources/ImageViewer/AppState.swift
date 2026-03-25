@@ -7,7 +7,7 @@ enum ViewMode: Equatable {
     case fullImage
 }
 
-enum SortOption: String, CaseIterable, Identifiable {
+enum SortOption: String, CaseIterable, Identifiable, Codable {
     case nameAZ        = "Name (A → Z)"
     case nameZA        = "Name (Z → A)"
     case newestFirst   = "Date Modified (Newest)"
@@ -28,6 +28,21 @@ enum SortOption: String, CaseIterable, Identifiable {
 
 final class AppState: ObservableObject {
 
+    // MARK: - Per-folder settings (persisted)
+
+    private struct FolderSettings: Codable {
+        var sortOption: SortOption
+        var searchText: String
+        var filterFileType: String?
+        var filterDateFrom: Date?
+        var filterDateTo: Date?
+        var showFavoritesOnly: Bool
+        var squareThumbnails: Bool
+    }
+
+    /// True while restoring settings from disk — suppresses redundant saves & sort triggers.
+    private var restoringSettings = false
+
     // MARK: - View state
 
     @Published var viewMode: ViewMode = .folderPicker
@@ -35,14 +50,22 @@ final class AppState: ObservableObject {
     @Published var selectedIndex: Int = 0
     @Published var noImagesFound: Bool = false
     @Published var folderVersion: Int = 0
-    @Published var squareThumbnails: Bool = true
+    @Published var squareThumbnails: Bool = true {
+        didSet {
+            guard !restoringSettings, currentFolder != nil else { return }
+            saveFolderSettings()
+        }
+    }
     @Published var keyboardNavigated: Bool = false
     @Published var galleryColumnCount: Int = 5
 
     // MARK: - Sort
 
     @Published var sortOption: SortOption = .nameAZ {
-        didSet { Task { await applyCurrentSort(resetSelection: true) } }
+        didSet {
+            guard !restoringSettings else { return }
+            Task { await applyCurrentSort(resetSelection: true) }
+        }
     }
 
     // MARK: - Full-image viewer
@@ -56,19 +79,19 @@ final class AppState: ObservableObject {
     // MARK: - Filters
 
     @Published var searchText: String = "" {
-        didSet { scheduleFilter() }
+        didSet { guard !restoringSettings else { return }; scheduleFilter() }
     }
     @Published var filterFileType: String? = nil {
-        didSet { scheduleFilter() }
+        didSet { guard !restoringSettings else { return }; scheduleFilter() }
     }
     @Published var filterDateFrom: Date? = nil {
-        didSet { scheduleFilter() }
+        didSet { guard !restoringSettings else { return }; scheduleFilter() }
     }
     @Published var filterDateTo: Date? = nil {
-        didSet { scheduleFilter() }
+        didSet { guard !restoringSettings else { return }; scheduleFilter() }
     }
     @Published var showFavoritesOnly: Bool = false {
-        didSet { scheduleFilter() }
+        didSet { guard !restoringSettings else { return }; scheduleFilter() }
     }
 
     // MARK: - Favorites (persisted)
@@ -83,6 +106,10 @@ final class AppState: ObservableObject {
 
     @Published var slideshowActive: Bool = false
     @Published var slideshowInterval: Double
+    @Published var kenBurnsEnabled: Bool
+    /// Set to true by the slideshow timer so FullImageView knows to crossfade.
+    /// Consumed (reset) at the start of each FullImageView task.
+    @Published var isSlideshowTransition: Bool = false
 
     // MARK: - Open-folder trigger (per-window, replaces notification)
 
@@ -105,6 +132,8 @@ final class AppState: ObservableObject {
         static let lastFolderPath    = "lastFolderPath"
         static let favorites         = "favoriteImagePaths"
         static let slideshowInterval = "slideshowInterval"
+        static let kenBurnsEnabled   = "kenBurnsEnabled"
+        static let folderSettings    = "folderSettings"
     }
 
     // MARK: - Init / deinit
@@ -116,6 +145,8 @@ final class AppState: ObservableObject {
         )
         let stored = ud.double(forKey: UDKey.slideshowInterval)
         slideshowInterval = stored > 0 ? stored : 3.0
+        kenBurnsEnabled = ud.object(forKey: UDKey.kenBurnsEnabled) != nil
+            ? ud.bool(forKey: UDKey.kenBurnsEnabled) : true   // on by default
         startMonitors()
     }
 
@@ -138,10 +169,22 @@ final class AppState: ObservableObject {
 
     // MARK: - Folder loading
 
+    @MainActor
     func loadImages(_ urls: [URL], from folder: URL? = nil) async {
         if let folder {
             currentFolder = folder
             UserDefaults.standard.set(folder.path, forKey: UDKey.lastFolderPath)
+            if let saved = loadFolderSettings(for: folder) {
+                restoringSettings = true
+                sortOption        = saved.sortOption
+                searchText        = saved.searchText
+                filterFileType    = saved.filterFileType
+                filterDateFrom    = saved.filterDateFrom
+                filterDateTo      = saved.filterDateTo
+                showFavoritesOnly = saved.showFavoritesOnly
+                squareThumbnails  = saved.squareThumbnails
+                restoringSettings = false
+            }
         }
         unsortedURLs = urls
         await applyCurrentSort(resetSelection: true)
@@ -211,6 +254,9 @@ final class AppState: ObservableObject {
         } else {
             selectedIndex = min(selectedIndex, max(0, filtered.count - 1))
         }
+
+        // Persist settings after every sort/filter operation (not during restore)
+        if !restoringSettings { saveFolderSettings() }
     }
 
     // All file-type extensions present in the current folder (pre-filter)
@@ -229,6 +275,37 @@ final class AppState: ObservableObject {
         filterDateFrom = nil
         filterDateTo   = nil
         showFavoritesOnly = false
+    }
+
+    // MARK: - Per-folder settings persistence
+
+    private func saveFolderSettings() {
+        guard let folder = currentFolder else { return }
+        let settings = FolderSettings(
+            sortOption:       sortOption,
+            searchText:       searchText,
+            filterFileType:   filterFileType,
+            filterDateFrom:   filterDateFrom,
+            filterDateTo:     filterDateTo,
+            showFavoritesOnly: showFavoritesOnly,
+            squareThumbnails: squareThumbnails
+        )
+        var all = allFolderSettings()
+        all[folder.path] = settings
+        if let data = try? JSONEncoder().encode(all) {
+            UserDefaults.standard.set(data, forKey: UDKey.folderSettings)
+        }
+    }
+
+    private func loadFolderSettings(for folder: URL) -> FolderSettings? {
+        allFolderSettings()[folder.path]
+    }
+
+    private func allFolderSettings() -> [String: FolderSettings] {
+        guard let data = UserDefaults.standard.data(forKey: UDKey.folderSettings),
+              let all  = try? JSONDecoder().decode([String: FolderSettings].self, from: data)
+        else { return [:] }
+        return all
     }
 
     // MARK: - Refresh
@@ -312,9 +389,14 @@ final class AppState: ObservableObject {
 
     func toggleSlideshow() {
         if slideshowActive {
-            slideshowActive = false
+            slideshowActive = false     // FullImageView observes this and snaps Ken Burns
             slideshowTask?.cancel()
             slideshowTask = nil
+            isSlideshowTransition = false
+            // Snap any user-applied zoom (non-Ken-Burns) to fit
+            var t = Transaction()
+            t.disablesAnimations = true
+            withTransaction(t) { zoomScale = 1.0; panOffset = .zero }
         } else {
             slideshowActive = true
             if viewMode != .fullImage { enterFullImage() }
@@ -333,6 +415,7 @@ final class AppState: ObservableObject {
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
                     guard self.slideshowActive else { return }
+                    self.isSlideshowTransition = true
                     let next = self.selectedIndex + 1
                     self.selectedIndex = next >= self.imageURLs.count ? 0 : next
                 }
@@ -344,6 +427,20 @@ final class AppState: ObservableObject {
         slideshowInterval = max(0.5, interval)
         UserDefaults.standard.set(slideshowInterval, forKey: UDKey.slideshowInterval)
         if slideshowActive { startSlideshowTask() }
+    }
+
+    func toggleKenBurns() {
+        kenBurnsEnabled.toggle()
+        UserDefaults.standard.set(kenBurnsEnabled, forKey: UDKey.kenBurnsEnabled)
+        if !kenBurnsEnabled {
+            // Cancel any in-flight animation and snap back to fit
+            var snap = Transaction()
+            snap.disablesAnimations = true
+            withTransaction(snap) {
+                zoomScale = 1.0
+                panOffset = .zero
+            }
+        }
     }
 
     // MARK: - Zoom to actual pixels (Cmd+1)
@@ -571,9 +668,15 @@ final class AppState: ObservableObject {
         slideshowTask?.cancel()
         slideshowTask = nil
         slideshowActive = false
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+        isSlideshowTransition = false
+        // Cancel any in-flight Ken Burns animation — snap zoom immediately
+        var snap = Transaction()
+        snap.disablesAnimations = true
+        withTransaction(snap) {
             zoomScale = 1.0
             panOffset = .zero
+        }
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
             viewMode = .gallery
         }
     }

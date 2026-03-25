@@ -57,6 +57,27 @@ struct SlideshowControlsOverlay: View {
 
             Spacer()
 
+            // Ken Burns toggle
+            Button {
+                state.toggleKenBurns()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "camera.filters")
+                        .font(.system(size: 12, weight: .medium))
+                    Text("Ken Burns")
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .foregroundStyle(state.kenBurnsEnabled ? Color.accentColor : .white.opacity(0.5))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(state.kenBurnsEnabled ? Color.accentColor.opacity(0.2) : Color.clear)
+                )
+            }
+            .buttonStyle(.plain)
+            .help(state.kenBurnsEnabled ? "Disable pan & zoom animation" : "Enable pan & zoom animation")
+
             // Stop
             Button {
                 state.toggleSlideshow()

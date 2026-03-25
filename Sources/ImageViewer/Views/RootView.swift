@@ -39,7 +39,6 @@ struct RootView: View {
             Task { await openFolder() }
         }
         .task {
-            // Auto-load last folder, or show picker
             if let lastFolder = state.lastFolderURL {
                 await loadFolder(lastFolder)
             } else {
