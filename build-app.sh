@@ -24,12 +24,13 @@ mkdir -p "${APP_BUNDLE}/Contents/Resources"
 # Copy binary
 cp "${BINARY}" "${APP_BUNDLE}/Contents/MacOS/${APP_NAME}"
 
-# Copy icon
-if [ -f "AppIcon.icns" ]; then
-    cp "AppIcon.icns" "${APP_BUNDLE}/Contents/Resources/AppIcon.icns"
-else
-    echo "Warning: AppIcon.icns not found — run 'swift make-icon.swift && iconutil -c icns AppIcon.iconset' first"
+# Generate icon if not already present
+if [ ! -f "AppIcon.icns" ]; then
+    echo "Generating AppIcon.icns..."
+    swift make-icon.swift
+    iconutil -c icns AppIcon.iconset
 fi
+cp "AppIcon.icns" "${APP_BUNDLE}/Contents/Resources/AppIcon.icns"
 
 # Write Info.plist
 cat > "${APP_BUNDLE}/Contents/Info.plist" << 'EOF'

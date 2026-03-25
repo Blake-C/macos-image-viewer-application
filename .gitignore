@@ -11,8 +11,9 @@ DerivedData/
 # Generated app bundle (built by build-app.sh)
 *.app/
 
-# Generated icon assets (built by make-icon.swift + iconutil)
+# Generated icon assets (auto-built by build-app.sh)
 AppIcon.iconset/
+AppIcon.icns
 
 # macOS
 .DS_Store
