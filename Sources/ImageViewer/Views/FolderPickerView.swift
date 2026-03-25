@@ -23,7 +23,7 @@ struct FolderPickerView: View {
                 }
 
                 Button {
-                    NotificationCenter.default.post(name: .openFolder, object: nil)
+                    state.requestOpenFolder()
                 } label: {
                     Label("Open Folder…", systemImage: "folder")
                         .font(.title3)

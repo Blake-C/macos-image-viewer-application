@@ -1,13 +1,16 @@
 import SwiftUI
+import AppKit
 
 struct GalleryView: View {
     @EnvironmentObject var state: AppState
-    @State private var isRefreshing = false
+
+    @State private var isRefreshing    = false
+    @State private var showFilterPopover = false
 
     private let columns = [GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 8)]
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        ZStack(alignment: .bottom) {
             GeometryReader { geo in
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -16,20 +19,24 @@ struct GalleryView: View {
                                 ThumbnailCell(
                                     url: url,
                                     isSelected: state.selectedIndex == i,
+                                    isMultiSelected: state.selectedURLs.contains(url),
+                                    isFavorite: state.isFavorite(url),
                                     squareThumbnails: state.squareThumbnails,
                                     onTap: {
-                                        state.keyboardNavigated = false
-                                        state.selectedIndex = i
-                                        state.enterFullImage()
+                                        state.handleThumbnailTap(url: url, atIndex: i)
                                     },
                                     onDelete: {
                                         state.deleteImage(at: url)
+                                    },
+                                    onToggleFavorite: {
+                                        state.toggleFavorite(url)
                                     }
                                 )
                             }
                         }
                         .padding(12)
-                        .padding(.top, 44)
+                        .padding(.top, 52)      // space for toolbar
+                        .padding(.bottom, state.selectedURLs.isEmpty ? 0 : 56)
                         .id(state.folderVersion)
                     }
                     .background(Color.black)
@@ -39,7 +46,6 @@ struct GalleryView: View {
                         proxy.scrollTo(state.imageURLs[newIdx])
                     }
                     .onAppear {
-                        // Give AppState the real column count based on actual width
                         state.galleryColumnCount = columnCount(for: geo.size.width)
                     }
                     .onChange(of: geo.size.width) { _, w in
@@ -48,8 +54,94 @@ struct GalleryView: View {
                 }
             }
 
-            // Toolbar: sort menu + thumbnail toggle
-            HStack(spacing: 8) {
+            // Multi-select action bar
+            if !state.selectedURLs.isEmpty {
+                MultiSelectBar()
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(2)
+            }
+
+            // Toolbar overlay
+            toolbarOverlay
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .zIndex(1)
+        }
+        .animation(.easeInOut(duration: 0.2), value: state.selectedURLs.isEmpty)
+    }
+
+    // MARK: - Toolbar
+
+    private var toolbarOverlay: some View {
+        HStack(spacing: 0) {
+            // Search field
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                    .font(.system(size: 13))
+                TextField("Search", text: $state.searchText)
+                    .textFieldStyle(.plain)
+                    .foregroundStyle(.white)
+                    .font(.system(size: 13))
+                if !state.searchText.isEmpty {
+                    Button { state.searchText = "" } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                            .font(.system(size: 12))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+            .frame(maxWidth: 220)
+
+            Spacer()
+
+            HStack(spacing: 6) {
+                // Filter button (type + date range)
+                Button {
+                    showFilterPopover = true
+                } label: {
+                    Image(systemName: state.hasActiveFilters ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(state.hasActiveFilters ? Color.accentColor : .white)
+                        .padding(8)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+                .help("Filters")
+                .popover(isPresented: $showFilterPopover, arrowEdge: .top) {
+                    FilterPopover()
+                        .environmentObject(state)
+                }
+
+                // Favorites toggle
+                Button {
+                    state.showFavoritesOnly.toggle()
+                } label: {
+                    Image(systemName: state.showFavoritesOnly ? "star.fill" : "star")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(state.showFavoritesOnly ? .yellow : .white)
+                        .padding(8)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+                .help(state.showFavoritesOnly ? "Show all images" : "Show favorites only")
+
+                // Full-screen
+                Button {
+                    NSApp.keyWindow?.toggleFullScreen(nil)
+                } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.white)
+                        .padding(8)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+                .help("Toggle full screen")
+
                 // Sort menu
                 Menu {
                     Section("Name") {
@@ -88,9 +180,9 @@ struct GalleryView: View {
                         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
                 }
                 .buttonStyle(.plain)
-                .help(state.squareThumbnails ? "Switch to aspect ratio thumbnails" : "Switch to square thumbnails")
+                .help(state.squareThumbnails ? "Aspect ratio thumbnails" : "Square thumbnails")
 
-                // Refresh button
+                // Refresh
                 Button {
                     guard !isRefreshing else { return }
                     isRefreshing = true
@@ -103,17 +195,20 @@ struct GalleryView: View {
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(.white)
                         .rotationEffect(.degrees(isRefreshing ? 360 : 0))
-                        .animation(isRefreshing ? .linear(duration: 0.6).repeatForever(autoreverses: false) : .default, value: isRefreshing)
+                        .animation(isRefreshing ? .linear(duration: 0.6).repeatForever(autoreverses: false) : .default,
+                                   value: isRefreshing)
                         .padding(8)
                         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
                 }
                 .buttonStyle(.plain)
                 .help("Refresh folder")
             }
-            .padding(.top, 10)
-            .padding(.trailing, 12)
         }
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
     }
+
+    // MARK: - Helpers
 
     @ViewBuilder
     private func sortButton(_ option: SortOption) -> some View {
@@ -126,8 +221,155 @@ struct GalleryView: View {
     }
 
     private func columnCount(for width: CGFloat) -> Int {
-        // Match the adaptive grid: min 160, spacing 8, padding 12 each side
         let available = width - 24
         return max(1, Int(available / 168))
+    }
+}
+
+// MARK: - Multi-select action bar
+
+private struct MultiSelectBar: View {
+    @EnvironmentObject var state: AppState
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Text("\(state.selectedURLs.count) selected")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.white)
+
+            Spacer()
+
+            Button {
+                state.copyPathsOfSelected()
+            } label: {
+                Label("Copy Paths", systemImage: "doc.on.doc")
+                    .font(.system(size: 12))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.white.opacity(0.8))
+
+            Button(role: .destructive) {
+                state.trashSelected()
+            } label: {
+                Label("Move to Trash", systemImage: "trash")
+                    .font(.system(size: 12))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.red.opacity(0.9))
+
+            Button {
+                state.clearMultiSelect()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.white.opacity(0.6))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .top) {
+            Divider().opacity(0.3)
+        }
+    }
+}
+
+// MARK: - Filter popover
+
+private struct FilterPopover: View {
+    @EnvironmentObject var state: AppState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+
+            // File type
+            VStack(alignment: .leading, spacing: 8) {
+                Text("File Type")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        typeChip(nil, label: "All")
+                        ForEach(state.availableFileTypes, id: \.self) { ext in
+                            typeChip(ext, label: ext.uppercased())
+                        }
+                    }
+                }
+            }
+
+            Divider()
+
+            // Date range
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Date Modified")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+
+                HStack {
+                    Text("From")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, alignment: .leading)
+                    DatePicker("", selection: Binding(
+                        get: { state.filterDateFrom ?? Calendar.current.date(byAdding: .year, value: -1, to: Date())! },
+                        set: { state.filterDateFrom = $0 }
+                    ), displayedComponents: .date)
+                    .labelsHidden()
+                    if state.filterDateFrom != nil {
+                        Button { state.filterDateFrom = nil } label: {
+                            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                        }.buttonStyle(.plain)
+                    }
+                }
+
+                HStack {
+                    Text("To")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, alignment: .leading)
+                    DatePicker("", selection: Binding(
+                        get: { state.filterDateTo ?? Date() },
+                        set: { state.filterDateTo = $0 }
+                    ), displayedComponents: .date)
+                    .labelsHidden()
+                    if state.filterDateTo != nil {
+                        Button { state.filterDateTo = nil } label: {
+                            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                        }.buttonStyle(.plain)
+                    }
+                }
+            }
+
+            if state.hasActiveFilters {
+                Divider()
+                Button("Clear All Filters") { state.clearFilters() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.red.opacity(0.8))
+            }
+        }
+        .padding(16)
+        .frame(width: 280)
+    }
+
+    @ViewBuilder
+    private func typeChip(_ ext: String?, label: String) -> some View {
+        let active = state.filterFileType == ext
+        Button {
+            state.filterFileType = active ? nil : ext
+        } label: {
+            Text(label)
+                .font(.system(size: 11, weight: .medium))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(active ? Color.accentColor : Color.primary.opacity(0.08),
+                            in: Capsule())
+                .foregroundStyle(active ? .white : .primary)
+        }
+        .buttonStyle(.plain)
     }
 }

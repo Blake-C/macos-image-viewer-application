@@ -7,6 +7,7 @@ struct FullImageView: View {
     @State private var fullImage: NSImage?
     @State private var isLoading = true
     @State private var dragLive: CGSize = .zero
+    @State private var imageInfo: ImageInfo? = nil
 
     var currentURL: URL { state.imageURLs[state.selectedIndex] }
 
@@ -18,16 +19,24 @@ struct FullImageView: View {
                 ProgressView()
                     .scaleEffect(1.5)
             } else if let img = fullImage {
-                Image(nsImage: img)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .scaleEffect(state.zoomScale)
-                    .offset(
-                        x: state.panOffset.width + dragLive.width,
-                        y: state.panOffset.height + dragLive.height
-                    )
-                    .allowsHitTesting(false)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                GeometryReader { geo in
+                    Image(nsImage: img)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .scaleEffect(state.zoomScale)
+                        .offset(
+                            x: state.panOffset.width + dragLive.width,
+                            y: state.panOffset.height + dragLive.height
+                        )
+                        .allowsHitTesting(false)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .onAppear {
+                            state.fullImageViewSize = geo.size
+                        }
+                        .onChange(of: geo.size) { _, size in
+                            state.fullImageViewSize = size
+                        }
+                }
             } else {
                 VStack(spacing: 12) {
                     Image(systemName: "exclamationmark.triangle")
@@ -39,31 +48,108 @@ struct FullImageView: View {
                 .allowsHitTesting(false)
             }
 
-            // Native mouse handler covers full window — reliable tap vs drag
+            // Mouse handler
             MouseEventHandler(
-                onDragLive: { offset in
-                    dragLive = offset
-                },
-                onDragEnd: { offset in
+                onDragLive: { offset in dragLive = offset },
+                onDragEnd:  { offset in
                     state.panOffset.width  += offset.width
                     state.panOffset.height += offset.height
                     dragLive = .zero
                 },
-                onTap: {
-                    state.handleTapInFullImage()
-                }
+                onTap: { state.handleTapInFullImage() }
             )
 
+            // Nav arrows
+            NavArrow(direction: .prev)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .allowsHitTesting(true)
+
+            NavArrow(direction: .next)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                .allowsHitTesting(true)
+
+            // Top-right controls: star + info toggle
+            VStack {
+                HStack(spacing: 8) {
+                    Spacer()
+
+                    // Favorites toggle
+                    Button {
+                        state.toggleFavorite(currentURL)
+                    } label: {
+                        Image(systemName: state.isFavorite(currentURL) ? "star.fill" : "star")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(state.isFavorite(currentURL) ? .yellow : .white)
+                            .frame(width: 40, height: 40)
+                            .background(.ultraThinMaterial.opacity(0.7), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(state.isFavorite(currentURL) ? "Remove from favorites" : "Add to favorites")
+
+                    // Info overlay toggle
+                    Button {
+                        state.showInfoOverlay.toggle()
+                    } label: {
+                        Image(systemName: state.showInfoOverlay ? "info.circle.fill" : "info.circle")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(.white)
+                            .frame(width: 40, height: 40)
+                            .background(.ultraThinMaterial.opacity(0.7), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Image info (i)")
+                }
+                .padding(.top, 12)
+                .padding(.trailing, 12)
+
+                Spacer()
+            }
+            .allowsHitTesting(true)
+            .zIndex(2)
+
+            // Info overlay (bottom-left)
+            if state.showInfoOverlay, let info = imageInfo {
+                VStack {
+                    Spacer()
+                    HStack {
+                        InfoOverlayView(info: info)
+                        Spacer()
+                    }
+                }
+                .allowsHitTesting(false)
+                .zIndex(3)
+                .transition(.opacity)
+            }
+
+            // Slideshow controls (bottom)
+            if state.slideshowActive {
+                VStack {
+                    Spacer()
+                    SlideshowControlsOverlay()
+                }
+                .zIndex(4)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
-        .overlay(alignment: .leading)  { NavArrow(direction: .prev) }
-        .overlay(alignment: .trailing) { NavArrow(direction: .next) }
+        .animation(.easeInOut(duration: 0.2), value: state.showInfoOverlay)
+        .animation(.easeInOut(duration: 0.2), value: state.slideshowActive)
         .ignoresSafeArea()
         .task(id: currentURL) {
             isLoading = true
             state.zoomScale = 1.0
             state.panOffset = .zero
             dragLive = .zero
-            fullImage = await ImageLoader.fullImage(for: currentURL)
+            imageInfo = nil
+
+            async let img       = ImageLoader.fullImage(for: currentURL)
+            async let info      = ImageInfo.load(for: currentURL)
+            async let pixelSize = ImageLoader.pixelSize(for: currentURL)
+
+            let (loadedImg, loadedInfo, loadedPixelSize) = await (img, info, pixelSize)
+
+            fullImage = loadedImg
+            imageInfo = loadedInfo
+            state.currentImagePixelSize = loadedPixelSize
             isLoading = false
         }
     }
@@ -114,15 +200,15 @@ struct MouseEventHandler: NSViewRepresentable {
     func makeNSView(context: Context) -> MouseNSView {
         let v = MouseNSView()
         v.onDragLive = onDragLive
-        v.onDragEnd = onDragEnd
-        v.onTap = onTap
+        v.onDragEnd  = onDragEnd
+        v.onTap      = onTap
         return v
     }
 
     func updateNSView(_ nsView: MouseNSView, context: Context) {
         nsView.onDragLive = onDragLive
-        nsView.onDragEnd = onDragEnd
-        nsView.onTap = onTap
+        nsView.onDragEnd  = onDragEnd
+        nsView.onTap      = onTap
     }
 
     class MouseNSView: NSView {
@@ -146,13 +232,9 @@ struct MouseEventHandler: NSViewRepresentable {
             guard let start = mouseDownLocation else { return }
             let loc = event.locationInWindow
             let dx = loc.x - start.x
-            let dy = -(loc.y - start.y) // flip: AppKit Y is bottom-up, SwiftUI top-down
-            if !isDragging && sqrt(dx * dx + dy * dy) > 4 {
-                isDragging = true
-            }
-            if isDragging {
-                onDragLive?(CGSize(width: dx, height: dy))
-            }
+            let dy = -(loc.y - start.y)
+            if !isDragging && sqrt(dx * dx + dy * dy) > 4 { isDragging = true }
+            if isDragging { onDragLive?(CGSize(width: dx, height: dy)) }
         }
 
         override func mouseUp(with event: NSEvent) {

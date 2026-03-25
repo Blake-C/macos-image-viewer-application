@@ -4,33 +4,57 @@ import AppKit
 struct ThumbnailCell: View {
     let url: URL
     let isSelected: Bool
+    let isMultiSelected: Bool
+    let isFavorite: Bool
     let squareThumbnails: Bool
     let onTap: () -> Void
     let onDelete: () -> Void
+    let onToggleFavorite: () -> Void
 
     @State private var thumbnail: NSImage?
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 6)
-                .fill(Color.white.opacity(0.06))
+        ZStack(alignment: .bottomTrailing) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.white.opacity(0.06))
 
-            if let img = thumbnail {
-                Image(nsImage: img)
-                    .resizable()
-                    .aspectRatio(contentMode: squareThumbnails ? .fill : .fit)
-            } else {
-                ProgressView()
-                    .scaleEffect(0.7)
+                if let img = thumbnail {
+                    Image(nsImage: img)
+                        .resizable()
+                        .aspectRatio(contentMode: squareThumbnails ? .fill : .fit)
+                } else {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                }
+            }
+            .frame(width: 160, height: 160)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(borderColor, lineWidth: 3)
+            )
+            .shadow(color: shadowColor, radius: 8)
+
+            // Favorites star badge
+            if isFavorite {
+                Image(systemName: "star.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.yellow)
+                    .shadow(color: .black.opacity(0.6), radius: 2)
+                    .padding(6)
+            }
+
+            // Multi-select checkmark badge
+            if isMultiSelected {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 18))
+                    .foregroundStyle(.white, Color.accentColor)
+                    .padding(4)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
         }
         .frame(width: 160, height: 160)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 3)
-        )
-        .shadow(color: isSelected ? Color.accentColor.opacity(0.4) : .clear, radius: 8)
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
         .contextMenu {
@@ -44,6 +68,15 @@ struct ThumbnailCell: View {
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             } label: {
                 Label("Show in Finder", systemImage: "folder")
+            }
+
+            Divider()
+
+            Button {
+                onToggleFavorite()
+            } label: {
+                Label(isFavorite ? "Remove from Favorites" : "Add to Favorites",
+                      systemImage: isFavorite ? "star.slash" : "star")
             }
 
             Divider()
@@ -88,5 +121,16 @@ struct ThumbnailCell: View {
         .task(id: url) {
             thumbnail = await ImageLoader.thumbnail(for: url, size: 320)
         }
+    }
+
+    private var borderColor: Color {
+        if isMultiSelected { return .accentColor }
+        if isSelected      { return .accentColor.opacity(0.7) }
+        return .clear
+    }
+
+    private var shadowColor: Color {
+        if isMultiSelected || isSelected { return Color.accentColor.opacity(0.4) }
+        return .clear
     }
 }

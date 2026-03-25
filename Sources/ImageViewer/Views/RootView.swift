@@ -32,11 +32,35 @@ struct RootView: View {
         .onAppear {
             NSApp.activate(ignoringOtherApps: true)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .openFolder)) { _ in
+        // Watch per-window open-folder request (replaces notification)
+        .onChange(of: state.openFolderRequested) { _, requested in
+            guard requested else { return }
+            state.openFolderRequested = false
             Task { await openFolder() }
         }
         .task {
-            await openFolder()
+            // Auto-load last folder, or show picker
+            if let lastFolder = state.lastFolderURL {
+                await loadFolder(lastFolder)
+            } else {
+                await openFolder()
+            }
+        }
+    }
+
+    // MARK: - Folder helpers
+
+    private func loadFolder(_ folder: URL) async {
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.windows.first?.makeKeyAndOrderFront(nil)
+        let urls = FolderScanner.scan(directory: folder)
+        state.zoomScale = 1.0
+        state.panOffset = .zero
+        state.noImagesFound = urls.isEmpty
+        state.folderVersion += 1
+        await state.loadImages(urls, from: folder)
+        withAnimation {
+            state.viewMode = urls.isEmpty ? .folderPicker : .gallery
         }
     }
 
