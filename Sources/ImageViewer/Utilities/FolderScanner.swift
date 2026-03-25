@@ -24,32 +24,32 @@ enum FolderScanner {
 
 private extension NSOpenPanel {
     func run() async -> (folder: URL, images: [URL])? {
-        await withCheckedContinuation { continuation in
+        guard let url = await withCheckedContinuation({ continuation in
             self.begin { response in
-                guard response == .OK, let url = self.url else {
-                    continuation.resume(returning: nil) // cancelled
-                    return
-                }
-                continuation.resume(returning: (url, FolderScanner.scan(directory: url)))
+                continuation.resume(returning: response == .OK ? self.url : nil)
             }
-        }
+        }) else { return nil }
+        let images = await FolderScanner.scan(directory: url)
+        return (url, images)
     }
 }
 
 extension FolderScanner {
-    static func scan(directory: URL) -> [URL] {
-        guard let contents = try? FileManager.default
-            .contentsOfDirectory(
-                at: directory,
-                includingPropertiesForKeys: [.isRegularFileKey],
-                options: .skipsHiddenFiles
-            )
-        else { return [] }
+    static func scan(directory: URL) async -> [URL] {
+        await Task.detached(priority: .userInitiated) {
+            guard let contents = try? FileManager.default
+                .contentsOfDirectory(
+                    at: directory,
+                    includingPropertiesForKeys: [.isRegularFileKey],
+                    options: .skipsHiddenFiles
+                )
+            else { return [] }
 
-        return contents
-            .filter { FolderScanner.imageExtensions.contains($0.pathExtension.lowercased()) }
-            .sorted {
-                $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
-            }
+            return contents
+                .filter { FolderScanner.imageExtensions.contains($0.pathExtension.lowercased()) }
+                .sorted {
+                    $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+                }
+        }.value
     }
 }

@@ -118,8 +118,11 @@ final class AppState: ObservableObject {
     // MARK: - Pipeline internals
 
     private var unsortedURLs: [URL] = []
-    private var sortedURLs: [URL] = []
+    private var sortedURLs: [URL] = [] {
+        didSet { _availableFileTypes = nil }   // invalidate cache on sort
+    }
     private var modDateCache: [URL: Date] = [:]
+    private var _availableFileTypes: [String]? = nil
     private(set) var currentFolder: URL?
 
     private var keyMonitor: Any?
@@ -187,6 +190,7 @@ final class AppState: ObservableObject {
             }
         }
         unsortedURLs = urls
+        ImageLoader.clearThumbnailCache()
         await applyCurrentSort(resetSelection: true)
     }
 
@@ -259,9 +263,12 @@ final class AppState: ObservableObject {
         if !restoringSettings { saveFolderSettings() }
     }
 
-    // All file-type extensions present in the current folder (pre-filter)
+    // All file-type extensions present in the current folder (pre-filter), cached
     var availableFileTypes: [String] {
-        Array(Set(sortedURLs.map { $0.pathExtension.lowercased() })).sorted()
+        if let cached = _availableFileTypes { return cached }
+        let types = Array(Set(sortedURLs.map { $0.pathExtension.lowercased() })).sorted()
+        _availableFileTypes = types
+        return types
     }
 
     var hasActiveFilters: Bool {
@@ -279,32 +286,41 @@ final class AppState: ObservableObject {
 
     // MARK: - Per-folder settings persistence
 
+    /// In-memory copy of the full settings dictionary — avoids decode on every save.
+    private var folderSettingsCache: [String: FolderSettings]?
+
     private func saveFolderSettings() {
         guard let folder = currentFolder else { return }
         let settings = FolderSettings(
-            sortOption:       sortOption,
-            searchText:       searchText,
-            filterFileType:   filterFileType,
-            filterDateFrom:   filterDateFrom,
-            filterDateTo:     filterDateTo,
+            sortOption:        sortOption,
+            searchText:        searchText,
+            filterFileType:    filterFileType,
+            filterDateFrom:    filterDateFrom,
+            filterDateTo:      filterDateTo,
             showFavoritesOnly: showFavoritesOnly,
-            squareThumbnails: squareThumbnails
+            squareThumbnails:  squareThumbnails
         )
-        var all = allFolderSettings()
+        var all = cachedFolderSettings()
         all[folder.path] = settings
+        folderSettingsCache = all
         if let data = try? JSONEncoder().encode(all) {
             UserDefaults.standard.set(data, forKey: UDKey.folderSettings)
         }
     }
 
     private func loadFolderSettings(for folder: URL) -> FolderSettings? {
-        allFolderSettings()[folder.path]
+        cachedFolderSettings()[folder.path]
     }
 
-    private func allFolderSettings() -> [String: FolderSettings] {
+    private func cachedFolderSettings() -> [String: FolderSettings] {
+        if let cached = folderSettingsCache { return cached }
         guard let data = UserDefaults.standard.data(forKey: UDKey.folderSettings),
               let all  = try? JSONDecoder().decode([String: FolderSettings].self, from: data)
-        else { return [:] }
+        else {
+            folderSettingsCache = [:]
+            return [:]
+        }
+        folderSettingsCache = all
         return all
     }
 
@@ -312,9 +328,10 @@ final class AppState: ObservableObject {
 
     func refreshCurrentFolder() async {
         guard let folder = currentFolder else { return }
-        let urls = FolderScanner.scan(directory: folder)
+        let urls = await FolderScanner.scan(directory: folder)
         unsortedURLs = urls
         folderVersion += 1
+        ImageLoader.clearThumbnailCache()
         await applyCurrentSort(resetSelection: false)
     }
 
@@ -684,11 +701,14 @@ final class AppState: ObservableObject {
     // MARK: - Sort (off main thread)
 
     private static func sortAndCache(_ urls: [URL], by option: SortOption) -> ([URL], [URL: Date]) {
+        // Only fetch modification dates when the sort actually needs them
         var cache: [URL: Date] = [:]
-        for url in urls {
-            if let vals = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
-               let date = vals.contentModificationDate {
-                cache[url] = date
+        if option == .newestFirst || option == .oldestFirst {
+            for url in urls {
+                if let vals = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
+                   let date = vals.contentModificationDate {
+                    cache[url] = date
+                }
             }
         }
         return (sort(urls, by: option, dateCache: cache), cache)

@@ -52,7 +52,7 @@ struct RootView: View {
     private func loadFolder(_ folder: URL) async {
         NSApp.activate(ignoringOtherApps: true)
         NSApp.windows.first?.makeKeyAndOrderFront(nil)
-        let urls = FolderScanner.scan(directory: folder)
+        let urls = await FolderScanner.scan(directory: folder)
         state.zoomScale = 1.0
         state.panOffset = .zero
         state.noImagesFound = urls.isEmpty
