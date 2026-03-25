@@ -35,9 +35,45 @@ struct ThumbnailCell: View {
         .onTapGesture(perform: onTap)
         .contextMenu {
             Button {
+                NSWorkspace.shared.open(url)
+            } label: {
+                Label("Open", systemImage: "arrow.up.right.square")
+            }
+
+            Button {
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             } label: {
                 Label("Show in Finder", systemImage: "folder")
+            }
+
+            Divider()
+
+            Button {
+                Task {
+                    if let image = NSImage(contentsOf: url) {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.writeObjects([image])
+                    }
+                }
+            } label: {
+                Label("Copy Image", systemImage: "doc.on.doc")
+            }
+
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(url.path, forType: .string)
+            } label: {
+                Label("Copy File Path", systemImage: "link")
+            }
+
+            Divider()
+
+            Button {
+                if let screen = NSScreen.main {
+                    try? NSWorkspace.shared.setDesktopImageURL(url, for: screen, options: [:])
+                }
+            } label: {
+                Label("Set as Wallpaper", systemImage: "photo")
             }
 
             Divider()
