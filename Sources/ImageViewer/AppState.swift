@@ -161,6 +161,11 @@ final class AppState: ObservableObject {
     }
 
     private func handleGalleryKey(_ event: NSEvent) -> Bool {
+        let cmd = event.modifierFlags.contains(.command)
+        if event.keyCode == 15 && cmd {   // Cmd+R — refresh
+            Task { await refreshCurrentFolder() }
+            return true
+        }
         guard !imageURLs.isEmpty else { return false }
         let opt = event.modifierFlags.contains(.option)
 
@@ -195,6 +200,10 @@ final class AppState: ObservableObject {
         let cmd = event.modifierFlags.contains(.command)
 
         switch event.keyCode {
+        case 15 where cmd:  // Cmd+R — refresh
+            Task { await refreshCurrentFolder() }
+            return true
+
         case 36:
             DispatchQueue.main.async { self.handleTapInFullImage() }
             return true
