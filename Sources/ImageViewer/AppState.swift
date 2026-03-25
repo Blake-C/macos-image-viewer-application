@@ -69,6 +69,15 @@ final class AppState: ObservableObject {
         await applyCurrentSort(resetSelection: true)
     }
 
+    @MainActor
+    func deleteImage(at url: URL) {
+        try? FileManager.default.trashItem(at: url, resultingItemURL: nil)
+        unsortedURLs.removeAll { $0 == url }
+        guard let idx = imageURLs.firstIndex(of: url) else { return }
+        imageURLs.remove(at: idx)
+        selectedIndex = min(selectedIndex, max(0, imageURLs.count - 1))
+    }
+
     func refreshCurrentFolder() async {
         guard let folder = currentFolder else { return }
         let urls = FolderScanner.scan(directory: folder)

@@ -1,10 +1,12 @@
 import SwiftUI
+import AppKit
 
 struct ThumbnailCell: View {
     let url: URL
     let isSelected: Bool
     let squareThumbnails: Bool
     let onTap: () -> Void
+    let onDelete: () -> Void
 
     @State private var thumbnail: NSImage?
 
@@ -31,6 +33,21 @@ struct ThumbnailCell: View {
         .shadow(color: isSelected ? Color.accentColor.opacity(0.4) : .clear, radius: 8)
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
+        .contextMenu {
+            Button {
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            } label: {
+                Label("Show in Finder", systemImage: "folder")
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                Label("Move to Trash", systemImage: "trash")
+            }
+        }
         .id(url)
         .task(id: url) {
             thumbnail = await ImageLoader.thumbnail(for: url, size: 320)

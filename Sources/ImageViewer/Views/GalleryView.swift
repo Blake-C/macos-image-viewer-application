@@ -16,13 +16,16 @@ struct GalleryView: View {
                                 ThumbnailCell(
                                     url: url,
                                     isSelected: state.selectedIndex == i,
-                                    squareThumbnails: state.squareThumbnails
-                                ) {
-                                    // Click: don't trigger scroll, just open image
-                                    state.keyboardNavigated = false
-                                    state.selectedIndex = i
-                                    state.enterFullImage()
-                                }
+                                    squareThumbnails: state.squareThumbnails,
+                                    onTap: {
+                                        state.keyboardNavigated = false
+                                        state.selectedIndex = i
+                                        state.enterFullImage()
+                                    },
+                                    onDelete: {
+                                        state.deleteImage(at: url)
+                                    }
+                                )
                             }
                         }
                         .padding(12)
