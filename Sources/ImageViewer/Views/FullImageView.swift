@@ -165,6 +165,68 @@ struct FullImageView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        .contextMenu {
+            Button {
+                NSWorkspace.shared.open(currentURL)
+            } label: {
+                Label("Open", systemImage: "arrow.up.right.square")
+            }
+
+            Button {
+                NSWorkspace.shared.activateFileViewerSelecting([currentURL])
+            } label: {
+                Label("Show in Finder", systemImage: "folder")
+            }
+
+            Divider()
+
+            Button {
+                state.toggleFavorite(currentURL)
+            } label: {
+                Label(state.isFavorite(currentURL) ? "Remove from Favorites" : "Add to Favorites",
+                      systemImage: state.isFavorite(currentURL) ? "star.slash" : "star")
+            }
+
+            Divider()
+
+            Button {
+                Task {
+                    if let image = NSImage(contentsOf: currentURL) {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.writeObjects([image])
+                    }
+                }
+            } label: {
+                Label("Copy Image", systemImage: "doc.on.doc")
+            }
+
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(currentURL.path, forType: .string)
+            } label: {
+                Label("Copy File Path", systemImage: "link")
+            }
+
+            Divider()
+
+            Button {
+                if let screen = NSScreen.main {
+                    try? NSWorkspace.shared.setDesktopImageURL(currentURL, for: screen, options: [:])
+                }
+            } label: {
+                Label("Set as Wallpaper", systemImage: "photo")
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                let url = currentURL
+                state.deleteImage(at: url)
+                if state.imageURLs.isEmpty { state.viewMode = .gallery }
+            } label: {
+                Label("Move to Trash", systemImage: "trash")
+            }
+        }
         // Capture view size for Ken Burns / zoom-to-pixels calculations
         .background(
             GeometryReader { geo in
