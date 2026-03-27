@@ -92,7 +92,10 @@ This compiles a release build and produces `ImageViewer.app` in the project dire
 
 ### Install to /Applications
 
+Always remove the old bundle before copying — overwriting in place can cause macOS to cache the old binary or code signature:
+
 ```bash
+rm -rf /Applications/ImageViewer.app
 cp -r ImageViewer.app /Applications/
 ```
 
@@ -103,6 +106,16 @@ After installation, refresh the Launch Services database so the app appears corr
 ```bash
 /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister -r -domain local -domain system -domain user && killall Finder
 ```
+
+### Updating the app
+
+If a newly built version doesn't reflect your latest changes, macOS likely cached the old bundle. Quit the app first, then do a clean replace:
+
+```bash
+./build-app.sh && killall ImageViewer 2>/dev/null; rm -rf /Applications/ImageViewer.app && cp -r ImageViewer.app /Applications/
+```
+
+The `killall` step ensures the old process isn't still holding the bundle open. The `rm -rf` before copying is the critical part — never overwrite a running or previously-installed `.app` in place.
 
 ### Run without installing
 
