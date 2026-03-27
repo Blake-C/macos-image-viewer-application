@@ -680,8 +680,8 @@ final class AppState: ObservableObject {
             }
             return true
 
-        case 53:            // Escape — back to gallery
-            DispatchQueue.main.async { self.viewMode = .gallery }
+        case 53:            // Escape — stop slideshow and back to gallery
+            DispatchQueue.main.async { self.returnToGallery() }
             return true
 
         case 1 where cmd:   // Cmd+S — back to gallery and focus search
