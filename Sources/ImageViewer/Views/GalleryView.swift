@@ -340,7 +340,7 @@ private struct FilterPopover: View {
                         .foregroundStyle(.secondary)
                         .frame(width: 32, alignment: .leading)
                     DatePicker("", selection: Binding(
-                        get: { state.filterDateFrom ?? Calendar.current.date(byAdding: .year, value: -1, to: Date())! },
+                        get: { state.filterDateFrom ?? Calendar.current.date(byAdding: .year, value: -1, to: Date()) ?? Date() },
                         set: { state.filterDateFrom = $0 }
                     ), displayedComponents: .date)
                     .labelsHidden()

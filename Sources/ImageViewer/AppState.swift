@@ -131,6 +131,7 @@ final class AppState: ObservableObject {
     private var keyMonitor: Any?
     private var scrollMonitor: Any?
     private var slideshowTask: Task<Void, Never>?
+    private var lastSizedURLs: [URL] = []
     private var folderWatchSource: DispatchSourceFileSystemObject?
     private var folderWatchFd: Int32 = -1
     private var folderRefreshTask: Task<Void, Never>?
@@ -241,8 +242,11 @@ final class AppState: ObservableObject {
 
         var filtered = sortedURLs
 
+        let lowerNames: [URL: String] = text.isEmpty ? [:] :
+            Dictionary(uniqueKeysWithValues: sortedURLs.map { ($0, $0.lastPathComponent.lowercased()) })
+
         if onlyFavs      { filtered = filtered.filter { favs.contains($0) } }
-        if !text.isEmpty { filtered = filtered.filter { $0.lastPathComponent.lowercased().contains(text) } }
+        if !text.isEmpty { filtered = filtered.filter { lowerNames[$0, default: ""].contains(text) } }
         if let ext       { filtered = filtered.filter { $0.pathExtension.lowercased() == ext } }
         if let from      {
             filtered = filtered.filter { (cache[$0] ?? .distantPast) >= from }
@@ -270,8 +274,10 @@ final class AppState: ObservableObject {
         // Persist settings after every sort/filter operation (not during restore)
         if !restoringSettings { saveFolderSettings() }
 
-        // Recompute total file size off-thread
+        // Recompute total file size off-thread (skip if URLs haven't changed)
         let urls = imageURLs
+        guard urls != lastSizedURLs else { return }
+        lastSizedURLs = urls
         Task.detached(priority: .utility) {
             let size = urls.reduce(into: Int64(0)) { total, url in
                 let v = try? url.resourceValues(forKeys: [.fileSizeKey])
@@ -500,10 +506,8 @@ final class AppState: ObservableObject {
         let targetZoom = 1.0 / fitScale
         let factor = targetZoom / zoomScale
         let anchor = cursorInViewCenter()
-        DispatchQueue.main.async {
-            withAnimation(.interactiveSpring()) {
-                self.applyZoom(factor: factor, anchor: anchor)
-            }
+        withAnimation(.interactiveSpring()) {
+            applyZoom(factor: factor, anchor: anchor)
         }
     }
 
@@ -511,6 +515,7 @@ final class AppState: ObservableObject {
 
     private func startWatchingFolder(_ url: URL) {
         stopWatchingFolder()
+        guard (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { return }
         let fd = open(url.path, O_EVTONLY)
         guard fd >= 0 else { return }
         folderWatchFd = fd
@@ -559,6 +564,7 @@ final class AppState: ObservableObject {
         }
     }
 
+    @MainActor
     private func handleKeyEvent(_ event: NSEvent) -> Bool {
         guard !(NSApp.keyWindow is NSOpenPanel) else { return false }
         switch viewMode {
@@ -568,6 +574,7 @@ final class AppState: ObservableObject {
         }
     }
 
+    @MainActor
     private func handleGalleryKey(_ event: NSEvent) -> Bool {
         let cmd = event.modifierFlags.contains(.command)
 
@@ -576,11 +583,11 @@ final class AppState: ObservableObject {
             return true
         }
         if event.keyCode == 31 && cmd {      // Cmd+O — open folder
-            DispatchQueue.main.async { self.requestOpenFolder() }
+            requestOpenFolder()
             return true
         }
         if event.keyCode == 1 && cmd {       // Cmd+S — focus search
-            DispatchQueue.main.async { self.shouldFocusSearch = true }
+            shouldFocusSearch = true
             return true
         }
 
@@ -599,18 +606,16 @@ final class AppState: ObservableObject {
             else   { navigate(-galleryColumnCount, keyboard: true) }
             return true
         case 36, 49:        // Enter or Space — open image
-            DispatchQueue.main.async {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                    self.viewMode = .fullImage
-                }
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                viewMode = .fullImage
             }
             return true
         case 51 where cmd:  // Cmd+Delete — trash selected/focused image
             let url = imageURLs[selectedIndex]
-            DispatchQueue.main.async { self.deleteImage(at: url) }
+            deleteImage(at: url)
             return true
         case 53:   // Escape — clear multi-select
-            if !selectedURLs.isEmpty { DispatchQueue.main.async { self.selectedURLs.removeAll() }; return true }
+            if !selectedURLs.isEmpty { selectedURLs.removeAll(); return true }
             return false
         default:
             return false
@@ -621,20 +626,21 @@ final class AppState: ObservableObject {
         zoomScale < 1.01 && abs(panOffset.width) < 1 && abs(panOffset.height) < 1
     }
 
+    @MainActor
     private func handleFullImageKey(_ event: NSEvent) -> Bool {
         let cmd = event.modifierFlags.contains(.command)
 
         switch event.keyCode {
         case 34:                // i — toggle info overlay
-            DispatchQueue.main.async { self.showInfoOverlay.toggle() }
+            showInfoOverlay.toggle()
             return true
 
         case 49:                // Space — same as Enter (toggle full image / back to gallery)
-            DispatchQueue.main.async { self.handleTapInFullImage() }
+            handleTapInFullImage()
             return true
 
         case 35 where cmd:      // Cmd+P — toggle slideshow
-            DispatchQueue.main.async { self.toggleSlideshow() }
+            toggleSlideshow()
             return true
 
         case 15 where cmd:      // Cmd+R — refresh
@@ -642,7 +648,7 @@ final class AppState: ObservableObject {
             return true
 
         case 31 where cmd:      // Cmd+O — open folder
-            DispatchQueue.main.async { self.requestOpenFolder() }
+            requestOpenFolder()
             return true
 
         case 18 where cmd:      // Cmd+1 — zoom to actual pixels
@@ -650,7 +656,7 @@ final class AppState: ObservableObject {
             return true
 
         case 36:                // Enter
-            DispatchQueue.main.async { self.handleTapInFullImage() }
+            handleTapInFullImage()
             return true
 
         case 24 where cmd:      // Cmd+=
@@ -662,49 +668,43 @@ final class AppState: ObservableObject {
             return true
 
         case 29 where cmd:      // Cmd+0
-            DispatchQueue.main.async {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                    self.zoomScale = 1.0
-                    self.panOffset = .zero
-                }
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                zoomScale = 1.0
+                panOffset = .zero
             }
             return true
 
         case 123:               // left arrow
-            if atFit { DispatchQueue.main.async { self.navigate(-1) } }
-            else { DispatchQueue.main.async { withAnimation(.interactiveSpring()) { self.panOffset.width += 60 } } }
+            if atFit { navigate(-1) }
+            else { withAnimation(.interactiveSpring()) { panOffset.width += 60 } }
             return true
 
         case 124:               // right arrow
-            if atFit { DispatchQueue.main.async { self.navigate(+1) } }
-            else { DispatchQueue.main.async { withAnimation(.interactiveSpring()) { self.panOffset.width -= 60 } } }
+            if atFit { navigate(+1) }
+            else { withAnimation(.interactiveSpring()) { panOffset.width -= 60 } }
             return true
 
         case 125:
-            DispatchQueue.main.async { withAnimation(.interactiveSpring()) { self.panOffset.height -= 60 } }
+            withAnimation(.interactiveSpring()) { panOffset.height -= 60 }
             return true
 
         case 126:
-            DispatchQueue.main.async { withAnimation(.interactiveSpring()) { self.panOffset.height += 60 } }
+            withAnimation(.interactiveSpring()) { panOffset.height += 60 }
             return true
 
         case 51 where cmd:  // Cmd+Delete — trash current image
             let url = imageURLs[selectedIndex]
-            DispatchQueue.main.async {
-                self.deleteImage(at: url)
-                if self.imageURLs.isEmpty { self.viewMode = .gallery }
-            }
+            deleteImage(at: url)
+            if imageURLs.isEmpty { viewMode = .gallery }
             return true
 
         case 53:            // Escape — stop slideshow and back to gallery
-            DispatchQueue.main.async { self.returnToGallery() }
+            returnToGallery()
             return true
 
         case 1 where cmd:   // Cmd+S — back to gallery and focus search
-            DispatchQueue.main.async {
-                self.focusSearchOnGalleryReturn = true
-                self.viewMode = .gallery
-            }
+            focusSearchOnGalleryReturn = true
+            viewMode = .gallery
             return true
 
         default:
@@ -714,10 +714,8 @@ final class AppState: ObservableObject {
 
     private func applyKeyboardZoom(factor: CGFloat) {
         let anchor = cursorInViewCenter()
-        DispatchQueue.main.async {
-            withAnimation(.interactiveSpring()) {
-                self.applyZoom(factor: factor, anchor: anchor)
-            }
+        withAnimation(.interactiveSpring()) {
+            applyZoom(factor: factor, anchor: anchor)
         }
     }
 
@@ -835,8 +833,9 @@ final class AppState: ObservableObject {
                 return (url, size)
             }
             let sorted = pairs.sorted { option == .largestFirst ? $0.1 > $1.1 : $0.1 < $1.1 }
-            let withSizes   = sorted.map(\.0)
-            let withoutSizes = urls.filter { u in !withSizes.contains(u) }
+            let withSizes    = sorted.map(\.0)
+            let withSizesSet = Set(withSizes)
+            let withoutSizes = urls.filter { !withSizesSet.contains($0) }
             return withSizes + withoutSizes
         }
     }

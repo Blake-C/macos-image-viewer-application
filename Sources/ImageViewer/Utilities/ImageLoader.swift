@@ -7,36 +7,15 @@ import ImageIO
 private final class ThumbnailCache: @unchecked Sendable {
     static let shared = ThumbnailCache()
 
-    private let lock = NSLock()
-    private var cache: [URL: NSImage] = [:]
-    private var order: [URL] = []          // LRU order (oldest first)
-    private let maxCount = 400             // ~400 thumbnails at 320px ≈ reasonable memory
+    private let cache = NSCache<NSURL, NSImage>()
 
-    func get(_ url: URL) -> NSImage? {
-        lock.lock(); defer { lock.unlock() }
-        guard let img = cache[url] else { return nil }
-        // Move to most-recently-used end
-        order.removeAll { $0 == url }
-        order.append(url)
-        return img
-    }
+    init() { cache.countLimit = 400 }
 
-    func set(_ url: URL, image: NSImage) {
-        lock.lock(); defer { lock.unlock() }
-        if cache[url] == nil { order.append(url) }
-        cache[url] = image
-        // Evict oldest entries when over capacity
-        while order.count > maxCount {
-            let oldest = order.removeFirst()
-            cache.removeValue(forKey: oldest)
-        }
-    }
+    func get(_ url: URL) -> NSImage? { cache.object(forKey: url as NSURL) }
 
-    func removeAll() {
-        lock.lock(); defer { lock.unlock() }
-        cache.removeAll()
-        order.removeAll()
-    }
+    func set(_ url: URL, image: NSImage) { cache.setObject(image, forKey: url as NSURL) }
+
+    func removeAll() { cache.removeAllObjects() }
 }
 
 // MARK: - ImageLoader
