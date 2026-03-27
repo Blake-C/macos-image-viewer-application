@@ -120,6 +120,15 @@ struct ThumbnailCell: View {
         .id(url)
         .task(id: url) {
             thumbnail = await ImageLoader.thumbnail(for: url, size: 320)
+            // If the file returned nil it may still be writing — retry up to 3 times
+            if thumbnail == nil {
+                for _ in 0..<3 {
+                    try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5s
+                    guard !Task.isCancelled else { return }
+                    thumbnail = await ImageLoader.thumbnail(for: url, size: 320)
+                    if thumbnail != nil { return }
+                }
+            }
         }
     }
 
