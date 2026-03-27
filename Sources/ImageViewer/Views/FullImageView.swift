@@ -135,7 +135,7 @@ struct FullImageView: View {
                     .buttonStyle(.plain)
                     .help("Move to Trash (⌘⌫)")
                 }
-                .padding(.top, 12)
+                .padding(.top, 10)
                 .padding(.trailing, 12)
                 Spacer()
             }
@@ -237,7 +237,6 @@ struct FullImageView: View {
         )
         .animation(.easeInOut(duration: 0.2), value: state.showInfoOverlay)
         .animation(.easeInOut(duration: 0.2), value: state.slideshowActive)
-        .ignoresSafeArea()
         // Stop Ken Burns when slideshow stops
         .onChange(of: state.slideshowActive) { _, active in
             if !active { cancelKenBurns() }
