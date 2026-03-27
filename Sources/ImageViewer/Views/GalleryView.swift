@@ -48,7 +48,14 @@ struct GalleryView: View {
                     }
                     .onAppear {
                         state.galleryColumnCount = columnCount(for: geo.size.width)
-                        DispatchQueue.main.async { searchFocused = false }
+                        DispatchQueue.main.async {
+                            if state.focusSearchOnGalleryReturn {
+                                state.focusSearchOnGalleryReturn = false
+                                searchFocused = true
+                            } else {
+                                searchFocused = false
+                            }
+                        }
                     }
                     .onChange(of: geo.size.width) { _, w in
                         state.galleryColumnCount = columnCount(for: w)
@@ -69,6 +76,12 @@ struct GalleryView: View {
                 .zIndex(1)
         }
         .animation(.easeInOut(duration: 0.2), value: state.selectedURLs.isEmpty)
+        .onChange(of: state.focusSearchOnGalleryReturn) { _, focus in
+            if focus {
+                state.focusSearchOnGalleryReturn = false
+                DispatchQueue.main.async { searchFocused = true }
+            }
+        }
         .background(
             Button("") { searchFocused = true }
                 .keyboardShortcut("s", modifiers: .command)

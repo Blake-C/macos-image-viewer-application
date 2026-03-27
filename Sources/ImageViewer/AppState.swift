@@ -73,6 +73,7 @@ final class AppState: ObservableObject {
     @Published var zoomScale: CGFloat = 1.0
     @Published var panOffset: CGSize = .zero
     @Published var showInfoOverlay: Bool = false
+    @Published var focusSearchOnGalleryReturn: Bool = false
     @Published var fullImageViewSize: CGSize = .zero    // set by FullImageView GeometryReader
     @Published var currentImagePixelSize: CGSize? = nil  // set by FullImageView task
 
@@ -128,6 +129,9 @@ final class AppState: ObservableObject {
     private var keyMonitor: Any?
     private var scrollMonitor: Any?
     private var slideshowTask: Task<Void, Never>?
+    private var folderWatchSource: DispatchSourceFileSystemObject?
+    private var folderWatchFd: Int32 = -1
+    private var folderRefreshTask: Task<Void, Never>?
 
     // MARK: - UserDefaults keys
 
@@ -176,6 +180,7 @@ final class AppState: ObservableObject {
     func loadImages(_ urls: [URL], from folder: URL? = nil) async {
         if let folder {
             currentFolder = folder
+            startWatchingFolder(folder)
             UserDefaults.standard.set(folder.path, forKey: UDKey.lastFolderPath)
             if let saved = loadFolderSettings(for: folder) {
                 restoringSettings = true
@@ -485,6 +490,40 @@ final class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Folder watching
+
+    private func startWatchingFolder(_ url: URL) {
+        stopWatchingFolder()
+        let fd = open(url.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+        folderWatchFd = fd
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .rename, .delete, .link],
+            queue: .main
+        )
+        source.setEventHandler { [weak self] in
+            guard let self else { return }
+            folderRefreshTask?.cancel()
+            folderRefreshTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s debounce
+                guard !Task.isCancelled, let self else { return }
+                await self.refreshCurrentFolder()
+            }
+        }
+        source.setCancelHandler { close(fd) }
+        source.resume()
+        folderWatchSource = source
+    }
+
+    private func stopWatchingFolder() {
+        folderRefreshTask?.cancel()
+        folderRefreshTask = nil
+        folderWatchSource?.cancel()
+        folderWatchSource = nil
+        folderWatchFd = -1
+    }
+
     // MARK: - Event monitors
 
     private func startMonitors() {
@@ -629,6 +668,13 @@ final class AppState: ObservableObject {
 
         case 53:            // Escape — back to gallery
             DispatchQueue.main.async { self.viewMode = .gallery }
+            return true
+
+        case 1 where cmd:   // Cmd+S — back to gallery and focus search
+            DispatchQueue.main.async {
+                self.focusSearchOnGalleryReturn = true
+                self.viewMode = .gallery
+            }
             return true
 
         default:
