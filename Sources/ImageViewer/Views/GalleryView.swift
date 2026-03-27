@@ -36,10 +36,10 @@ struct GalleryView: View {
                             }
                         }
                         .padding(12)
-                        .padding(.top, 52)      // space for toolbar
                         .padding(.bottom, state.selectedURLs.isEmpty ? 0 : 56)
                         .id(state.folderVersion)
                     }
+                    .safeAreaInset(edge: .top, spacing: 0) { toolbarOverlay }
                     .background(Color.black)
                     .onChange(of: state.selectedIndex) { _, newIdx in
                         guard state.keyboardNavigated,
@@ -70,10 +70,6 @@ struct GalleryView: View {
                     .zIndex(2)
             }
 
-            // Toolbar overlay
-            toolbarOverlay
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .zIndex(1)
         }
         .animation(.easeInOut(duration: 0.2), value: state.selectedURLs.isEmpty)
         .onChange(of: state.focusSearchOnGalleryReturn) { _, focus in
