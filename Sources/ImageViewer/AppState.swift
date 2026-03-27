@@ -134,6 +134,7 @@ final class AppState: ObservableObject {
     private var folderWatchSource: DispatchSourceFileSystemObject?
     private var folderWatchFd: Int32 = -1
     private var folderRefreshTask: Task<Void, Never>?
+    private var suppressFolderRefresh = false
 
     // MARK: - UserDefaults keys
 
@@ -412,6 +413,10 @@ final class AppState: ObservableObject {
 
     @MainActor
     func deleteImage(at url: URL, playSound: Bool = true) {
+        suppressFolderRefresh = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.suppressFolderRefresh = false
+        }
         try? FileManager.default.trashItem(at: url, resultingItemURL: nil)
         if playSound { NSSound(contentsOfFile: "/System/Library/Components/CoreAudio.component/Contents/SharedSupport/SystemSounds/dock/drag to trash.aif", byReference: true)?.play() }
         unsortedURLs.removeAll { $0 == url }
@@ -515,7 +520,7 @@ final class AppState: ObservableObject {
             queue: .main
         )
         source.setEventHandler { [weak self] in
-            guard let self else { return }
+            guard let self, !self.suppressFolderRefresh else { return }
             folderRefreshTask?.cancel()
             folderRefreshTask = Task { [weak self] in
                 try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s debounce
