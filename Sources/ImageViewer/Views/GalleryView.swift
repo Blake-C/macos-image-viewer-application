@@ -6,6 +6,7 @@ struct GalleryView: View {
 
     @State private var isRefreshing    = false
     @State private var showFilterPopover = false
+    @FocusState private var searchFocused: Bool
 
     private let columns = [GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 8)]
 
@@ -47,6 +48,7 @@ struct GalleryView: View {
                     }
                     .onAppear {
                         state.galleryColumnCount = columnCount(for: geo.size.width)
+                        DispatchQueue.main.async { searchFocused = false }
                     }
                     .onChange(of: geo.size.width) { _, w in
                         state.galleryColumnCount = columnCount(for: w)
@@ -82,6 +84,8 @@ struct GalleryView: View {
                     .textFieldStyle(.plain)
                     .foregroundStyle(.white)
                     .font(.system(size: 13))
+                    .focused($searchFocused)
+                    .onExitCommand { searchFocused = false }
                 if !state.searchText.isEmpty {
                     Button { state.searchText = "" } label: {
                         Image(systemName: "xmark.circle.fill")

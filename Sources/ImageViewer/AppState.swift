@@ -533,7 +533,7 @@ final class AppState: ObservableObject {
             if opt { navigate(-selectedIndex, keyboard: true) }
             else   { navigate(-galleryColumnCount, keyboard: true) }
             return true
-        case 36:
+        case 36, 49:        // Enter or Space — open image
             DispatchQueue.main.async {
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                     self.viewMode = .fullImage
@@ -564,7 +564,11 @@ final class AppState: ObservableObject {
             DispatchQueue.main.async { self.showInfoOverlay.toggle() }
             return true
 
-        case 49:                // Space — toggle slideshow
+        case 49:                // Space — same as Enter (toggle full image / back to gallery)
+            DispatchQueue.main.async { self.handleTapInFullImage() }
+            return true
+
+        case 35 where cmd:      // Cmd+P — toggle slideshow
             DispatchQueue.main.async { self.toggleSlideshow() }
             return true
 
