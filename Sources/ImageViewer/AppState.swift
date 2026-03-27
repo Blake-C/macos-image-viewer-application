@@ -74,6 +74,7 @@ final class AppState: ObservableObject {
     @Published var panOffset: CGSize = .zero
     @Published var showInfoOverlay: Bool = false
     @Published var focusSearchOnGalleryReturn: Bool = false
+    @Published var shouldFocusSearch: Bool = false
     @Published var fullImageViewSize: CGSize = .zero    // set by FullImageView GeometryReader
     @Published var currentImagePixelSize: CGSize? = nil  // set by FullImageView task
 
@@ -557,6 +558,14 @@ final class AppState: ObservableObject {
             Task { await refreshCurrentFolder() }
             return true
         }
+        if event.keyCode == 31 && cmd {      // Cmd+O — open folder
+            DispatchQueue.main.async { self.requestOpenFolder() }
+            return true
+        }
+        if event.keyCode == 1 && cmd {       // Cmd+S — focus search
+            DispatchQueue.main.async { self.shouldFocusSearch = true }
+            return true
+        }
 
         guard !imageURLs.isEmpty else { return false }
         let opt = event.modifierFlags.contains(.option)
@@ -613,6 +622,10 @@ final class AppState: ObservableObject {
 
         case 15 where cmd:      // Cmd+R — refresh
             Task { await refreshCurrentFolder() }
+            return true
+
+        case 31 where cmd:      // Cmd+O — open folder
+            DispatchQueue.main.async { self.requestOpenFolder() }
             return true
 
         case 18 where cmd:      // Cmd+1 — zoom to actual pixels

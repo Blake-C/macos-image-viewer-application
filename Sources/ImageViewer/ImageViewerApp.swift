@@ -5,6 +5,7 @@ extension Notification.Name {
     static let openFolder = Notification.Name("openFolder")
 }
 
+
 // MARK: - AppDelegate
 
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -34,6 +35,9 @@ struct WindowContent: View {
             .focusedObject(state)       // exposes state to @FocusedObject in Commands
             .frame(minWidth: 900, minHeight: 600)
             .background(Color.black)
+            .onChange(of: state.currentFolder) { _, folder in
+                NSApp.keyWindow?.title = folder?.lastPathComponent ?? "Image Viewer"
+            }
             .onAppear {
                 // Register this window's open-new-window capability with the delegate
                 if let delegate = NSApp.delegate as? AppDelegate {

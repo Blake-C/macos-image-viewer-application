@@ -82,11 +82,12 @@ struct GalleryView: View {
                 DispatchQueue.main.async { searchFocused = true }
             }
         }
-        .background(
-            Button("") { searchFocused = true }
-                .keyboardShortcut("s", modifiers: .command)
-                .hidden()
-        )
+        .onChange(of: state.shouldFocusSearch) { _, focus in
+            if focus {
+                state.shouldFocusSearch = false
+                searchFocused = true
+            }
+        }
     }
 
     // MARK: - Toolbar
