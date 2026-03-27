@@ -544,6 +544,7 @@ final class AppState: ObservableObject {
     }
 
     private func handleKeyEvent(_ event: NSEvent) -> Bool {
+        guard !(NSApp.keyWindow is NSOpenPanel) else { return false }
         switch viewMode {
         case .gallery:      return handleGalleryKey(event)
         case .fullImage:    return handleFullImageKey(event)
