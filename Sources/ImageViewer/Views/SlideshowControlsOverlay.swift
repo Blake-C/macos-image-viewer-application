@@ -25,7 +25,8 @@ struct SlideshowControlsOverlay: View {
                     Image(systemName: "minus")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.white)
-                        .frame(width: 20, height: 20)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .disabled(state.slideshowInterval <= 0.5)
@@ -42,7 +43,8 @@ struct SlideshowControlsOverlay: View {
                     Image(systemName: "plus")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.white)
-                        .frame(width: 20, height: 20)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
