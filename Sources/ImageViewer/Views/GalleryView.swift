@@ -69,6 +69,11 @@ struct GalleryView: View {
                 .zIndex(1)
         }
         .animation(.easeInOut(duration: 0.2), value: state.selectedURLs.isEmpty)
+        .background(
+            Button("") { searchFocused = true }
+                .keyboardShortcut("s", modifiers: .command)
+                .hidden()
+        )
     }
 
     // MARK: - Toolbar
@@ -85,7 +90,13 @@ struct GalleryView: View {
                     .foregroundStyle(.white)
                     .font(.system(size: 13))
                     .focused($searchFocused)
-                    .onExitCommand { searchFocused = false }
+                    .onExitCommand {
+                        if state.searchText.isEmpty {
+                            searchFocused = false
+                        } else {
+                            state.searchText = ""
+                        }
+                    }
                 if !state.searchText.isEmpty {
                     Button { state.searchText = "" } label: {
                         Image(systemName: "xmark.circle.fill")
