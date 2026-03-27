@@ -380,7 +380,8 @@ final class AppState: ObservableObject {
         let toDelete = selectedURLs
         selectedURLs.removeAll()
         Task { @MainActor in
-            toDelete.forEach { deleteImage(at: $0) }
+            toDelete.forEach { deleteImage(at: $0, playSound: false) }
+            NSSound(contentsOfFile: "/System/Library/Components/CoreAudio.component/Contents/SharedSupport/SystemSounds/dock/drag to trash.aif", byReference: true)?.play()
         }
     }
 
@@ -393,8 +394,9 @@ final class AppState: ObservableObject {
     // MARK: - Delete
 
     @MainActor
-    func deleteImage(at url: URL) {
+    func deleteImage(at url: URL, playSound: Bool = true) {
         try? FileManager.default.trashItem(at: url, resultingItemURL: nil)
+        if playSound { NSSound(contentsOfFile: "/System/Library/Components/CoreAudio.component/Contents/SharedSupport/SystemSounds/dock/drag to trash.aif", byReference: true)?.play() }
         unsortedURLs.removeAll { $0 == url }
         sortedURLs.removeAll   { $0 == url }
         guard let idx = imageURLs.firstIndex(of: url) else { return }
@@ -538,6 +540,10 @@ final class AppState: ObservableObject {
                 }
             }
             return true
+        case 51 where cmd:  // Cmd+Delete — trash selected/focused image
+            let url = imageURLs[selectedIndex]
+            DispatchQueue.main.async { self.deleteImage(at: url) }
+            return true
         case 53:   // Escape — clear multi-select
             if !selectedURLs.isEmpty { DispatchQueue.main.async { self.selectedURLs.removeAll() }; return true }
             return false
@@ -607,6 +613,14 @@ final class AppState: ObservableObject {
 
         case 126:
             DispatchQueue.main.async { withAnimation(.interactiveSpring()) { self.panOffset.height += 60 } }
+            return true
+
+        case 51 where cmd:  // Cmd+Delete — trash current image
+            let url = imageURLs[selectedIndex]
+            DispatchQueue.main.async {
+                self.deleteImage(at: url)
+                if self.imageURLs.isEmpty { self.viewMode = .gallery }
+            }
             return true
 
         default:

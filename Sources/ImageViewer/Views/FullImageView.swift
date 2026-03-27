@@ -120,6 +120,20 @@ struct FullImageView: View {
                     }
                     .buttonStyle(.plain)
                     .help("Image info (i)")
+
+                    Button {
+                        let url = currentURL
+                        state.deleteImage(at: url)
+                        if state.imageURLs.isEmpty { state.viewMode = .gallery }
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(.red.opacity(0.9))
+                            .frame(width: 40, height: 40)
+                            .background(.ultraThinMaterial.opacity(0.7), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Move to Trash (⌘⌫)")
                 }
                 .padding(.top, 12)
                 .padding(.trailing, 12)
