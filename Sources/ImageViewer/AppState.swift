@@ -623,6 +623,10 @@ final class AppState: ObservableObject {
             }
             return true
 
+        case 53:            // Escape — back to gallery
+            DispatchQueue.main.async { self.viewMode = .gallery }
+            return true
+
         default:
             return false
         }
