@@ -75,6 +75,7 @@ final class AppState: ObservableObject {
     @Published var showInfoOverlay: Bool = false
     @Published var focusSearchOnGalleryReturn: Bool = false
     @Published var shouldFocusSearch: Bool = false
+    @Published var totalFileSize: Int64 = 0
     @Published var fullImageViewSize: CGSize = .zero    // set by FullImageView GeometryReader
     @Published var currentImagePixelSize: CGSize? = nil  // set by FullImageView task
 
@@ -267,6 +268,16 @@ final class AppState: ObservableObject {
 
         // Persist settings after every sort/filter operation (not during restore)
         if !restoringSettings { saveFolderSettings() }
+
+        // Recompute total file size off-thread
+        let urls = imageURLs
+        Task.detached(priority: .utility) {
+            let size = urls.reduce(into: Int64(0)) { total, url in
+                let v = try? url.resourceValues(forKeys: [.fileSizeKey])
+                total += Int64(v?.fileSize ?? 0)
+            }
+            await MainActor.run { self.totalFileSize = size }
+        }
     }
 
     // All file-type extensions present in the current folder (pre-filter), cached

@@ -28,22 +28,49 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 struct WindowContent: View {
     @StateObject private var state = AppState()
     @Environment(\.openWindow) private var openWindow
+    @State private var window: NSWindow?
 
     var body: some View {
         RootView()
             .environmentObject(state)
             .focusedObject(state)       // exposes state to @FocusedObject in Commands
             .frame(minWidth: 900, minHeight: 600)
-            .background(Color.black)
-            .onChange(of: state.currentFolder) { _, folder in
-                NSApp.keyWindow?.title = folder?.lastPathComponent ?? "Image Viewer"
-            }
+            .background(WindowAccessor(window: $window).ignoresSafeArea())
+            .onChange(of: state.currentFolder)   { _, _ in updateTitle() }
+            .onChange(of: state.imageURLs.count) { _, _ in updateTitle() }
+            .onChange(of: state.totalFileSize)   { _, _ in updateTitle() }
             .onAppear {
-                // Register this window's open-new-window capability with the delegate
                 if let delegate = NSApp.delegate as? AppDelegate {
                     delegate.openNewWindowAction = { openWindow(id: "main") }
                 }
             }
+    }
+
+    private func updateTitle() {
+        guard let folder = state.currentFolder else {
+            window?.title = "Image Viewer"
+            return
+        }
+        let count = state.imageURLs.count
+        let sizeStr = ByteCountFormatter.string(fromByteCount: state.totalFileSize, countStyle: .file)
+        let itemStr = count == 1 ? "1 item" : "\(count) items"
+        window?.title = "\(folder.lastPathComponent) — \(itemStr), \(sizeStr)"
+    }
+}
+
+/// Captures the NSWindow reference for the current view so title updates work
+/// even when the app is not the key window.
+private struct WindowAccessor: NSViewRepresentable {
+    @Binding var window: NSWindow?
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { self.window = view.window }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async { self.window = nsView.window }
     }
 }
 
