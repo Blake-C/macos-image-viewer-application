@@ -2,6 +2,8 @@
 
 A fast, native macOS image gallery and viewer built with Swift and SwiftUI. No Xcode required — built entirely with Swift Package Manager from the command line.
 
+> **Note:** This application was written entirely by [Claude](https://claude.ai) (Anthropic) and has not been reviewed by a human developer. Use at your own discretion.
+
 ## Features
 
 ### Gallery
