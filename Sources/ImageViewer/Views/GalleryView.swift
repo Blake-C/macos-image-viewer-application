@@ -4,8 +4,9 @@ import AppKit
 struct GalleryView: View {
     @EnvironmentObject var state: AppState
 
-    @State private var isRefreshing    = false
+    @State private var isRefreshing      = false
     @State private var showFilterPopover = false
+    @State private var showSettings      = false
     @FocusState private var searchFocused: Bool
 
     private let columns = [GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 8)]
@@ -227,6 +228,23 @@ struct GalleryView: View {
                 }
                 .buttonStyle(.plain)
                 .help("Refresh folder")
+
+                // Settings
+                Button {
+                    showSettings = true
+                } label: {
+                    Image(systemName: state.currentFolderIsLocked ? "gearshape.fill" : "gearshape")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(state.currentFolderIsLocked ? Color.accentColor : .white)
+                        .padding(8)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+                .help("Folder settings")
+                .sheet(isPresented: $showSettings) {
+                    FolderSettingsSheet()
+                        .environmentObject(state)
+                }
             }
         }
         .padding(.horizontal, 12)

@@ -118,6 +118,13 @@ final class AppState: ObservableObject {
 
     @Published var openFolderRequested: Bool = false
 
+    // MARK: - Lock / auth state
+
+    @Published var currentFolderIsLocked: Bool = false
+    @Published var authFailed: Bool = false
+    @Published var pendingAuthFolder: URL? = nil
+    @Published var retryAuthRequested: Bool = false
+
     // MARK: - Pipeline internals
 
     private var unsortedURLs: [URL] = []
@@ -167,6 +174,32 @@ final class AppState: ObservableObject {
         slideshowTask?.cancel()
     }
 
+    // MARK: - Folder lock
+
+    func refreshLockState() {
+        currentFolderIsLocked = currentFolder.map { FolderLockManager.shared.isLocked($0) } ?? false
+    }
+
+    func enableLockForCurrentFolder() {
+        guard let folder = currentFolder else { return }
+        FolderLockManager.shared.lock(folder)
+        currentFolderIsLocked = true
+    }
+
+    @MainActor
+    func disableLockForCurrentFolder() async -> Bool {
+        guard let folder = currentFolder else { return false }
+        let ok = await FolderLockManager.shared.authenticate(
+            for: folder,
+            reason: "Authenticate to remove Touch ID protection from \"\(folder.lastPathComponent)\""
+        )
+        if ok {
+            FolderLockManager.shared.unlock(folder)
+            currentFolderIsLocked = false
+        }
+        return ok
+    }
+
     // MARK: - Last-opened folder
 
     var lastFolderURL: URL? {
@@ -184,6 +217,7 @@ final class AppState: ObservableObject {
     func loadImages(_ urls: [URL], from folder: URL? = nil) async {
         if let folder {
             currentFolder = folder
+            refreshLockState()
             startWatchingFolder(folder)
             UserDefaults.standard.set(folder.path, forKey: UDKey.lastFolderPath)
             if let saved = loadFolderSettings(for: folder) {

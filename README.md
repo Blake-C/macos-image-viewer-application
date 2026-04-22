@@ -57,6 +57,14 @@ A fast, native macOS image gallery and viewer built with Swift and SwiftUI. No X
 ### Full-Image Context Menu (right-click)
 - Same actions as the thumbnail context menu
 
+### Folder Security
+- Lock any open folder with Touch ID via the gear icon in the gallery toolbar
+- Authentication is required each time a locked folder is opened — including on app launch
+- Falls back to your macOS login password if Touch ID is unavailable
+- Lock state is stored per-folder in UserDefaults and enforced via macOS LocalAuthentication
+- Disabling a lock requires Touch ID or your login password
+- Locked folders show a lock icon in the toolbar gear button
+
 ### General
 - Multiple independent windows (**Cmd+N**), each with its own folder and state
 - Full-screen support (**Cmd+F**)
@@ -186,16 +194,18 @@ Sources/ImageViewer/
 ├── AppState.swift               # Central state, navigation, sort, filter, slideshow, folder watching
 ├── ImageViewerApp.swift         # App entry point, per-window setup, menu commands, title bar
 ├── Views/
-│   ├── RootView.swift           # Top-level view switcher
-│   ├── FolderPickerView.swift   # Initial folder selection screen
+│   ├── RootView.swift           # Top-level view switcher, folder auth gate
+│   ├── FolderPickerView.swift   # Initial folder selection screen, auth failure UI
 │   ├── GalleryView.swift        # Thumbnail grid, toolbar, filter popover
 │   ├── ThumbnailCell.swift      # Individual thumbnail with context menu
 │   ├── FullImageView.swift      # Full-image viewer, zoom/pan, Ken Burns, crossfade, context menu
 │   ├── SlideshowControlsOverlay.swift
-│   └── InfoOverlayView.swift    # Image metadata HUD
+│   ├── InfoOverlayView.swift    # Image metadata HUD
+│   └── FolderSettingsSheet.swift  # Touch ID lock toggle
 └── Utilities/
     ├── ImageLoader.swift        # Async image loading with LRU thumbnail cache
-    └── FolderScanner.swift      # Async directory enumeration
+    ├── FolderScanner.swift      # Async directory enumeration
+    └── FolderLockManager.swift  # Keychain-backed Touch ID lock state
 ```
 
 ## Technical Notes
@@ -208,6 +218,7 @@ Sources/ImageViewer/
 - Per-folder settings are stored in `UserDefaults` as JSON, decoded once per launch and cached in memory
 - Folder changes are detected via `DispatchSource` file system events with a 0.5s debounce
 - In-app deletions suppress the folder watcher to avoid redundant refreshes
+- Folder lock state is stored in `UserDefaults`; authentication is enforced via `LAContext.evaluatePolicy(.deviceOwnerAuthentication)` which gates access with Touch ID or the macOS login password
 
 ## License
 
