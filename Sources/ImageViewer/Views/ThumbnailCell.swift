@@ -7,6 +7,8 @@ struct ThumbnailCell: View {
     let isMultiSelected: Bool
     let isFavorite: Bool
     let squareThumbnails: Bool
+    var masonry: Bool = false
+    var cellWidth: CGFloat = 160
     let onTap: () -> Void
     let onDelete: () -> Void
     let onToggleFavorite: () -> Void
@@ -22,13 +24,14 @@ struct ThumbnailCell: View {
                 if let img = thumbnail {
                     Image(nsImage: img)
                         .resizable()
-                        .aspectRatio(contentMode: squareThumbnails ? .fill : .fit)
+                        .aspectRatio(contentMode: masonry ? .fit : (squareThumbnails ? .fill : .fit))
                 } else {
                     ProgressView()
                         .scaleEffect(0.7)
+                        .frame(height: masonry ? 180 : nil)
                 }
             }
-            .frame(width: 160, height: 160)
+            .frame(width: masonry ? cellWidth : 160, height: masonry ? nil : 160)
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
@@ -54,7 +57,7 @@ struct ThumbnailCell: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
         }
-        .frame(width: 160, height: 160)
+        .frame(width: masonry ? cellWidth : 160, height: masonry ? nil : 160)
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
         .contextMenu {
@@ -119,13 +122,14 @@ struct ThumbnailCell: View {
         }
         .id(url)
         .task(id: url) {
-            thumbnail = await ImageLoader.thumbnail(for: url, size: 320)
+            let size: CGFloat = masonry ? 800 : 320
+            thumbnail = await ImageLoader.thumbnail(for: url, size: size)
             // If the file returned nil it may still be writing — retry up to 3 times
             if thumbnail == nil {
                 for _ in 0..<3 {
                     try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5s
                     guard !Task.isCancelled else { return }
-                    thumbnail = await ImageLoader.thumbnail(for: url, size: 320)
+                    thumbnail = await ImageLoader.thumbnail(for: url, size: size)
                     if thumbnail != nil { return }
                 }
             }

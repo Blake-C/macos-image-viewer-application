@@ -9,36 +9,34 @@ struct GalleryView: View {
     @State private var showSettings      = false
     @FocusState private var searchFocused: Bool
 
-    private let columns = [GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 8)]
+    private let gridColumns = [GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 8)]
 
     var body: some View {
         ZStack(alignment: .bottom) {
             GeometryReader { geo in
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVGrid(columns: columns, spacing: 8) {
-                            ForEach(Array(state.imageURLs.enumerated()), id: \.element) { i, url in
-                                ThumbnailCell(
-                                    url: url,
-                                    isSelected: state.selectedIndex == i,
-                                    isMultiSelected: state.selectedURLs.contains(url),
-                                    isFavorite: state.isFavorite(url),
-                                    squareThumbnails: state.squareThumbnails,
-                                    onTap: {
-                                        state.handleThumbnailTap(url: url, atIndex: i)
-                                    },
-                                    onDelete: {
-                                        state.deleteImage(at: url)
-                                    },
-                                    onToggleFavorite: {
-                                        state.toggleFavorite(url)
-                                    }
-                                )
+                        if state.masonryLayout {
+                            masonryContent(availableWidth: geo.size.width)
+                        } else {
+                            LazyVGrid(columns: gridColumns, spacing: 8) {
+                                ForEach(Array(state.imageURLs.enumerated()), id: \.element) { i, url in
+                                    ThumbnailCell(
+                                        url: url,
+                                        isSelected: state.selectedIndex == i,
+                                        isMultiSelected: state.selectedURLs.contains(url),
+                                        isFavorite: state.isFavorite(url),
+                                        squareThumbnails: state.squareThumbnails,
+                                        onTap: { state.handleThumbnailTap(url: url, atIndex: i) },
+                                        onDelete: { state.deleteImage(at: url) },
+                                        onToggleFavorite: { state.toggleFavorite(url) }
+                                    )
+                                }
                             }
+                            .padding(12)
+                            .padding(.bottom, state.selectedURLs.isEmpty ? 0 : 56)
+                            .id(state.folderVersion)
                         }
-                        .padding(12)
-                        .padding(.bottom, state.selectedURLs.isEmpty ? 0 : 56)
-                        .id(state.folderVersion)
                     }
                     .safeAreaInset(edge: .top, spacing: 0) { toolbarOverlay }
                     .background(Color.black)
@@ -193,20 +191,37 @@ struct GalleryView: View {
                 .buttonStyle(.plain)
                 .help("Sort images")
 
-                // Thumbnail mode toggle
+                // Thumbnail mode toggle (hidden in masonry — always aspect ratio there)
+                if !state.masonryLayout {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            state.squareThumbnails.toggle()
+                        }
+                    } label: {
+                        Image(systemName: state.squareThumbnails ? "rectangle.arrowtriangle.2.inward" : "square.grid.2x2")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(.white)
+                            .padding(8)
+                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+                    .help(state.squareThumbnails ? "Aspect ratio thumbnails" : "Square thumbnails")
+                }
+
+                // Masonry layout toggle
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
-                        state.squareThumbnails.toggle()
+                        state.masonryLayout.toggle()
                     }
                 } label: {
-                    Image(systemName: state.squareThumbnails ? "rectangle.arrowtriangle.2.inward" : "square.grid.2x2")
+                    Image(systemName: state.masonryLayout ? "rectangle.3.group.fill" : "rectangle.3.group")
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(state.masonryLayout ? Color.accentColor : .white)
                         .padding(8)
                         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
                 }
                 .buttonStyle(.plain)
-                .help(state.squareThumbnails ? "Aspect ratio thumbnails" : "Square thumbnails")
+                .help(state.masonryLayout ? "Switch to grid layout" : "Switch to masonry layout")
 
                 // Refresh
                 Button {
@@ -249,6 +264,53 @@ struct GalleryView: View {
         }
         .padding(.horizontal, 12)
         .padding(.top, 10)
+    }
+
+    // MARK: - Masonry layout
+
+    @ViewBuilder
+    private func masonryContent(availableWidth: CGFloat) -> some View {
+        let spacing: CGFloat = 8
+        let numCols = masonryColumnCount(for: availableWidth)
+        let colWidth = (availableWidth - 24 - spacing * CGFloat(numCols - 1)) / CGFloat(numCols)
+        let distributed = distributeURLs(state.imageURLs, into: numCols)
+
+        HStack(alignment: .top, spacing: spacing) {
+            ForEach(0..<numCols, id: \.self) { col in
+                LazyVStack(spacing: spacing) {
+                    ForEach(Array(distributed[col].enumerated()), id: \.element) { localIdx, url in
+                        let globalIdx = col + localIdx * numCols
+                        ThumbnailCell(
+                            url: url,
+                            isSelected: state.selectedIndex == globalIdx,
+                            isMultiSelected: state.selectedURLs.contains(url),
+                            isFavorite: state.isFavorite(url),
+                            squareThumbnails: false,
+                            masonry: true,
+                            cellWidth: colWidth,
+                            onTap: { state.handleThumbnailTap(url: url, atIndex: globalIdx) },
+                            onDelete: { state.deleteImage(at: url) },
+                            onToggleFavorite: { state.toggleFavorite(url) }
+                        )
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .padding(.bottom, state.selectedURLs.isEmpty ? 0 : 56)
+        .id(state.folderVersion)
+    }
+
+    private func masonryColumnCount(for width: CGFloat) -> Int {
+        max(2, Int(width / 360))
+    }
+
+    private func distributeURLs(_ urls: [URL], into columns: Int) -> [[URL]] {
+        var result = Array(repeating: [URL](), count: columns)
+        for (i, url) in urls.enumerated() {
+            result[i % columns].append(url)
+        }
+        return result
     }
 
     // MARK: - Helpers

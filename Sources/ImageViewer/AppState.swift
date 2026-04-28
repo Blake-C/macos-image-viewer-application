@@ -38,6 +38,7 @@ final class AppState: ObservableObject {
         var filterDateTo: Date?
         var showFavoritesOnly: Bool
         var squareThumbnails: Bool
+        var masonryLayout: Bool
     }
 
     /// True while restoring settings from disk — suppresses redundant saves & sort triggers.
@@ -51,6 +52,12 @@ final class AppState: ObservableObject {
     @Published var noImagesFound: Bool = false
     @Published var folderVersion: Int = 0
     @Published var squareThumbnails: Bool = true {
+        didSet {
+            guard !restoringSettings, currentFolder != nil else { return }
+            saveFolderSettings()
+        }
+    }
+    @Published var masonryLayout: Bool = false {
         didSet {
             guard !restoringSettings, currentFolder != nil else { return }
             saveFolderSettings()
@@ -234,6 +241,7 @@ final class AppState: ObservableObject {
                 filterDateTo      = saved.filterDateTo
                 showFavoritesOnly = saved.showFavoritesOnly
                 squareThumbnails  = saved.squareThumbnails
+                masonryLayout     = saved.masonryLayout
                 restoringSettings = false
             }
         }
@@ -361,7 +369,8 @@ final class AppState: ObservableObject {
             filterDateFrom:    filterDateFrom,
             filterDateTo:      filterDateTo,
             showFavoritesOnly: showFavoritesOnly,
-            squareThumbnails:  squareThumbnails
+            squareThumbnails:  squareThumbnails,
+            masonryLayout:     masonryLayout
         )
         var all = cachedFolderSettings()
         all[folder.path] = settings
