@@ -80,7 +80,11 @@ A fast, native macOS image gallery and viewer built with Swift and SwiftUI. No X
 
 ## Supported Formats
 
-`jpg` `jpeg` `png` `gif` `heic` `heif` `tiff` `tif` `bmp` `webp` `avif`
+**Standard:** `jpg` `jpeg` `png` `gif` `heic` `heif` `tiff` `tif` `bmp` `webp` `avif`
+
+**RAW:** `dng` `raw` `cr2` `cr3` `arw` `nef` `orf` `rw2` `raf` `pef` `srw` `x3f` `3fr` `mef` `nrw` `rwl` `iiq`
+
+RAW formats are decoded via macOS ImageIO — support depends on your macOS version and the camera model.
 
 ## Requirements
 

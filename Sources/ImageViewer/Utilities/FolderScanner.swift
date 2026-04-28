@@ -3,8 +3,12 @@ import Foundation
 
 enum FolderScanner {
     static let imageExtensions: Set<String> = [
+        // Common formats
         "jpg", "jpeg", "png", "gif", "heic", "heif",
-        "tiff", "tif", "bmp", "webp", "avif"
+        "tiff", "tif", "bmp", "webp", "avif",
+        // RAW formats (supported natively by macOS ImageIO)
+        "dng", "raw", "cr2", "cr3", "arw", "nef", "orf", "rw2", "raf",
+        "pef", "srw", "x3f", "3fr", "mef", "nrw", "rwl", "iiq",
     ]
 
     /// Returns nil if the user cancelled, or (folder, images) if they confirmed.
