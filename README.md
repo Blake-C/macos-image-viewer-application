@@ -9,6 +9,7 @@ A fast, native macOS image gallery and viewer built with Swift and SwiftUI. No X
 ### Gallery
 - Grid view of all images in a folder with thumbnail previews
 - Square or aspect-ratio thumbnail mode (toggle with **Cmd+T**)
+- Masonry layout mode — variable-height columns sized to each image's natural aspect ratio
 - Sort by name, date modified, or file size (ascending or descending)
 - Search by filename (**Cmd+S** to focus search field)
 - Filter by file type (JPEG, PNG, HEIC, etc.)
@@ -27,12 +28,14 @@ A fast, native macOS image gallery and viewer built with Swift and SwiftUI. No X
 - Image info overlay (**I**) — filename, pixel dimensions, file size, date modified
 - Metadata sheet (**M**) — full ImageIO metadata (General, TIFF, EXIF, GPS, IPTC, PNG); ComfyUI workflow images show parsed model, generation, and prompt sections; every field has a copy-to-clipboard button
 - Right-click context menu with the same actions as the gallery thumbnail menu
+- Play/pause slideshow button in the top-right corner (**Cmd+P**)
 - Trash button in the top-right corner
 
 ### Slideshow
-- Press **Cmd+P** to start/stop a slideshow
+- Press **Cmd+P** to start/stop a slideshow (or use the play/pause button in the full-image toolbar)
 - Crossfade transition between images on auto-advance; instant cut on manual navigation
 - Adjustable interval (0.5s minimum) via controls overlay
+- Shuffle mode — randomly selects the next image instead of advancing sequentially
 - Ken Burns pan & zoom effect — portrait images pan top-to-bottom, landscape pan left-to-right
 
 ### Delete / Trash
@@ -198,16 +201,18 @@ Sources/ImageViewer/
 ├── Views/
 │   ├── RootView.swift           # Top-level view switcher, folder auth gate
 │   ├── FolderPickerView.swift   # Initial folder selection screen, auth failure UI
-│   ├── GalleryView.swift        # Thumbnail grid, toolbar, filter popover
-│   ├── ThumbnailCell.swift      # Individual thumbnail with context menu
+│   ├── GalleryView.swift        # Thumbnail grid, masonry layout, toolbar, filter popover
+│   ├── ThumbnailCell.swift      # Individual thumbnail with context menu (grid + masonry)
 │   ├── FullImageView.swift      # Full-image viewer, zoom/pan, Ken Burns, crossfade, context menu
+│   ├── MetadataPanelView.swift  # Full ImageIO + ComfyUI metadata sheet
 │   ├── SlideshowControlsOverlay.swift
 │   ├── InfoOverlayView.swift    # Image metadata HUD
 │   └── FolderSettingsSheet.swift  # Touch ID lock toggle
 └── Utilities/
-    ├── ImageLoader.swift        # Async image loading with LRU thumbnail cache
-    ├── FolderScanner.swift      # Async directory enumeration
-    └── FolderLockManager.swift  # Keychain-backed Touch ID lock state
+    ├── ImageLoader.swift            # Async image loading with LRU thumbnail cache
+    ├── FolderScanner.swift          # Async directory enumeration
+    ├── FolderLockManager.swift      # Keychain-backed Touch ID lock state
+    └── ComfyUIWorkflowParser.swift  # Parses ComfyUI workflow JSON embedded in PNG metadata
 ```
 
 ## Technical Notes
