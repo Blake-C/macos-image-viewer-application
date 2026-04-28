@@ -569,16 +569,12 @@ private struct GalleryScrollController: NSViewRepresentable {
 			let visible = sv.contentView.bounds
 
 			let targetY: CGFloat
-			if doCenter {
-				targetY = rowY - (visible.height - cellSize) / 2
+			if rowY < visible.minY {
+				targetY = max(0, rowY - padding)
+			} else if rowY + cellSize > visible.maxY {
+				targetY = rowY + cellSize - visible.height + padding
 			} else {
-				if rowY < visible.minY {
-					targetY = max(0, rowY - padding)
-				} else if rowY + cellSize > visible.maxY {
-					targetY = rowY + cellSize - visible.height + padding
-				} else {
-					return
-				}
+				return
 			}
 
 			let clampedY = max(0, targetY)
