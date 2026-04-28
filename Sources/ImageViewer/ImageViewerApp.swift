@@ -95,7 +95,7 @@ struct AppCommands: Commands {
 
         CommandMenu("View") {
             Button(state?.squareThumbnails == true ? "Aspect Ratio Thumbnails" : "Square Thumbnails") {
-                withAnimation(.easeInOut(duration: 0.2)) { state?.squareThumbnails.toggle() }
+                state?.squareThumbnails.toggle()
             }
             .keyboardShortcut("t", modifiers: .command)
             .disabled(state == nil)

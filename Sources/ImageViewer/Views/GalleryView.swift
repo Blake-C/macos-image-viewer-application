@@ -44,6 +44,7 @@ struct GalleryView: View {
                             .padding(12)
                             .padding(.bottom, state.selectedURLs.isEmpty ? 0 : 56)
                             .id(state.folderVersion)
+                            .animation(.easeInOut(duration: 0.2), value: state.squareThumbnails)
                             .background(
                                 GalleryScrollController(
                                     selectedIndex: state.selectedIndex,
@@ -639,10 +640,7 @@ private struct ViewPopover: View {
                         .foregroundStyle(.secondary)
                         .textCase(.uppercase)
 
-                    Toggle(isOn: Binding(
-                        get: { state.squareThumbnails },
-                        set: { newValue in withAnimation(.easeInOut(duration: 0.2)) { state.squareThumbnails = newValue } }
-                    )) {
+                    Toggle(isOn: $state.squareThumbnails) {
                         Text("Square thumbnails")
                             .font(.system(size: 13))
                     }
