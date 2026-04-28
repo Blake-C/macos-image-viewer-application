@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 struct GalleryView: View {
     @EnvironmentObject var state: AppState
@@ -69,8 +70,11 @@ struct GalleryView: View {
                     }
                     .onDrop(of: [.folder, .fileURL], isTargeted: $isDragTargeted) { providers in
                         guard let provider = providers.first else { return false }
-                        _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                            guard let url else { return }
+                        // Finder exposes dragged items as raw file-URL data, not as URL objects.
+                        // loadDataRepresentation is the reliable path for macOS Finder drags.
+                        _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, _ in
+                            guard let data,
+                                  let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
                             var isDir: ObjCBool = false
                             guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),
                                   isDir.boolValue else { return }
@@ -83,23 +87,7 @@ struct GalleryView: View {
                         return true
                     }
                     .overlay {
-                        if isDragTargeted {
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.accentColor, lineWidth: 3)
-                                .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-                                .overlay {
-                                    VStack(spacing: 8) {
-                                        Image(systemName: "folder.badge.plus")
-                                            .font(.system(size: 36))
-                                            .foregroundStyle(Color.accentColor)
-                                        Text("Drop folder to open")
-                                            .font(.system(size: 14, weight: .medium))
-                                            .foregroundStyle(Color.accentColor)
-                                    }
-                                }
-                                .padding(8)
-                                .allowsHitTesting(false)
-                        }
+                        if isDragTargeted { FolderDropOverlay() }
                     }
                 }
             }
@@ -411,6 +399,28 @@ struct GalleryView: View {
     private func columnCount(for width: CGFloat) -> Int {
         let available = width - 24
         return max(1, Int(available / (state.thumbnailSize + 8)))
+    }
+}
+
+// MARK: - Folder drop overlay
+
+private struct FolderDropOverlay: View {
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 12)
+        ZStack {
+            shape.stroke(Color.accentColor, lineWidth: 3)
+            shape.fill(Color.accentColor.opacity(0.08))
+            VStack(spacing: 8) {
+                Image(systemName: "folder.badge.plus")
+                    .font(.system(size: 36))
+                    .foregroundStyle(Color.accentColor)
+                Text("Drop folder to open")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Color.accentColor)
+            }
+        }
+        .padding(8)
+        .allowsHitTesting(false)
     }
 }
 
