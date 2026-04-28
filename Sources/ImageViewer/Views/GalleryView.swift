@@ -7,6 +7,7 @@ struct GalleryView: View {
 
     @State private var isRefreshing        = false
     @State private var showFilterPopover   = false
+    @State private var showViewPopover     = false
     @State private var showSettings        = false
     @State private var isDragTargeted      = false
     @State private var pendingCenterScroll = false
@@ -181,7 +182,7 @@ struct GalleryView: View {
             Spacer()
 
             HStack(spacing: 6) {
-                // Filter button (type + date range)
+                // Filter button (type, date range, favorites)
                 Button {
                     showFilterPopover = true
                 } label: {
@@ -197,19 +198,6 @@ struct GalleryView: View {
                     FilterPopover()
                         .environmentObject(state)
                 }
-
-                // Favorites toggle
-                Button {
-                    state.showFavoritesOnly.toggle()
-                } label: {
-                    Image(systemName: state.showFavoritesOnly ? "star.fill" : "star")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(state.showFavoritesOnly ? .yellow : .white)
-                        .padding(8)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
-                }
-                .buttonStyle(.plain)
-                .help(state.showFavoritesOnly ? "Show all images" : "Show favorites only")
 
                 // Full-screen
                 Button {
@@ -249,55 +237,21 @@ struct GalleryView: View {
                 .buttonStyle(.plain)
                 .help("Sort images")
 
-                // Thumbnail mode toggle (hidden in masonry — always aspect ratio there)
-                if !state.masonryLayout {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            state.squareThumbnails.toggle()
-                        }
-                    } label: {
-                        Image(systemName: state.squareThumbnails ? "rectangle.arrowtriangle.2.inward" : "square.grid.2x2")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(.white)
-                            .padding(8)
-                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
-                    }
-                    .buttonStyle(.plain)
-                    .help(state.squareThumbnails ? "Aspect ratio thumbnails" : "Square thumbnails")
-                }
-
-                // Masonry layout toggle
+                // View button (layout, thumbnail mode, size)
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        state.masonryLayout.toggle()
-                    }
+                    showViewPopover = true
                 } label: {
-                    Image(systemName: state.masonryLayout ? "rectangle.3.group.fill" : "rectangle.3.group")
+                    Image(systemName: state.masonryLayout ? "rectangle.3.group.fill" : "square.grid.2x2")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(state.masonryLayout ? Color.accentColor : .white)
                         .padding(8)
                         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
                 }
                 .buttonStyle(.plain)
-                .help(state.masonryLayout ? "Switch to grid layout" : "Switch to masonry layout")
-
-                // Thumbnail size slider (grid mode only)
-                if !state.masonryLayout {
-                    HStack(spacing: 4) {
-                        Image(systemName: "photo")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.white.opacity(0.6))
-                        Slider(value: $state.thumbnailSize, in: 100...280, step: 10)
-                            .frame(width: 80)
-                            .tint(.white.opacity(0.8))
-                        Image(systemName: "photo")
-                            .font(.system(size: 14))
-                            .foregroundStyle(.white.opacity(0.6))
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
-                    .help("Adjust thumbnail size")
+                .help("View options")
+                .popover(isPresented: $showViewPopover, arrowEdge: .top) {
+                    ViewPopover()
+                        .environmentObject(state)
                 }
 
                 // Refresh
@@ -649,6 +603,65 @@ private struct MultiSelectBar: View {
     }
 }
 
+// MARK: - View options popover
+
+private struct ViewPopover: View {
+    @EnvironmentObject var state: AppState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+
+            // Layout
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Layout")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+
+                Picker("", selection: $state.masonryLayout) {
+                    Label("Grid", systemImage: "square.grid.2x2").tag(false)
+                    Label("Masonry", systemImage: "rectangle.3.group").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+
+            if !state.masonryLayout {
+                Divider()
+
+                // Grid options
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Grid Options")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+
+                    Toggle(isOn: $state.squareThumbnails) {
+                        Text("Square thumbnails")
+                            .font(.system(size: 13))
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Thumbnail size")
+                            .font(.system(size: 13))
+                        HStack(spacing: 6) {
+                            Image(systemName: "photo")
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                            Slider(value: $state.thumbnailSize, in: 100...280, step: 10)
+                            Image(systemName: "photo")
+                                .font(.system(size: 14))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(width: 260)
+    }
+}
+
 // MARK: - Filter popover
 
 private struct FilterPopover: View {
@@ -656,6 +669,21 @@ private struct FilterPopover: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+
+            // Favorites
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Favorites")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+
+                Toggle(isOn: $state.showFavoritesOnly) {
+                    Text("Show favorites only")
+                        .font(.system(size: 13))
+                }
+            }
+
+            Divider()
 
             // File type
             VStack(alignment: .leading, spacing: 8) {
