@@ -20,6 +20,7 @@ private struct MetadataRow: Identifiable {
 
 struct MetadataPanelView: View {
 	let metadata: [String: Any]
+	var imageURL: URL? = nil
 	@EnvironmentObject var state: AppState
 
 	private var sections: [MetadataSection] { buildSections() }
@@ -153,24 +154,33 @@ struct MetadataPanelView: View {
 
 	// MARK: - ComfyUI workflow detection
 
-	private func buildComfyUISections(to sections: inout [MetadataSection]) {
-		guard let iptcDict = metadata[kCGImagePropertyIPTCDictionary as String] as? [String: Any],
-		      let captionRaw = iptcDict[kCGImagePropertyIPTCCaptionAbstract as String]
-		else { return }
-
-		let captionString: String?
-		if let str = captionRaw as? String {
-			captionString = str.trimmingCharacters(in: .whitespacesAndNewlines)
-		} else if let arr = captionRaw as? [Any], let first = arr.first as? String {
-			captionString = first.trimmingCharacters(in: .whitespacesAndNewlines)
-		} else {
-			captionString = nil
+	private func findComfyUIWorkflow() -> ComfyUIWorkflow? {
+		// 1. IPTC caption — the normal path for most formats
+		if let iptcDict = metadata[kCGImagePropertyIPTCDictionary as String] as? [String: Any],
+		   let captionRaw = iptcDict[kCGImagePropertyIPTCCaptionAbstract as String] {
+			let str: String?
+			if let s = captionRaw as? String {
+				str = s.trimmingCharacters(in: .whitespacesAndNewlines)
+			} else if let arr = captionRaw as? [Any], let first = arr.first as? String {
+				str = first.trimmingCharacters(in: .whitespacesAndNewlines)
+			} else {
+				str = nil
+			}
+			if let s = str, s.hasPrefix("{"), let wf = ComfyUIWorkflowParser.parse(from: s) {
+				return wf
+			}
 		}
+		// 2. Raw file bytes — bypasses the system XMP parser that truncates at `&`
+		if let url = imageURL,
+		   let raw = ComfyUIWorkflowParser.extractWorkflowJSON(from: url),
+		   let wf = ComfyUIWorkflowParser.parse(from: raw) {
+			return wf
+		}
+		return nil
+	}
 
-		guard let str = captionString,
-		      str.hasPrefix("{"),
-		      let wf = ComfyUIWorkflowParser.parse(from: str)
-		else { return }
+	private func buildComfyUISections(to sections: inout [MetadataSection]) {
+		guard let wf = findComfyUIWorkflow() else { return }
 
 		// Model section
 		var modelRows: [MetadataRow] = []
@@ -179,6 +189,9 @@ struct MetadataPanelView: View {
 		}
 		if let v = wf.vae {
 			modelRows.append(MetadataRow(key: "VAE", value: v, subItems: []))
+		}
+		if let v = wf.upscaleModel {
+			modelRows.append(MetadataRow(key: "Upscale Model", value: v, subItems: []))
 		}
 		if let v = wf.ollamaModel {
 			modelRows.append(MetadataRow(key: "Ollama Model", value: v, subItems: []))
@@ -213,6 +226,9 @@ struct MetadataPanelView: View {
 
 		// Prompts section
 		var promptRows: [MetadataRow] = []
+		if let v = wf.positivePrompt {
+			promptRows.append(MetadataRow(key: "Prompt", value: v, subItems: []))
+		}
 		if let v = wf.ollamaEnhancedPrompt {
 			promptRows.append(MetadataRow(key: "Enhanced", value: v, subItems: []))
 		}

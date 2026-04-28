@@ -32,7 +32,7 @@ struct FullImageView: View {
 		imageZStack
 			.sheet(isPresented: $state.showMetadataPanel) {
 				if let meta = state.currentImageMetadata {
-					MetadataPanelView(metadata: meta)
+					MetadataPanelView(metadata: meta, imageURL: currentURL)
 						.environmentObject(state)
 				} else {
 					VStack(spacing: 12) {
