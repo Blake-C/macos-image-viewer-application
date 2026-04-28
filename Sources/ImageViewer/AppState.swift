@@ -147,6 +147,7 @@ final class AppState: ObservableObject {
 
     private var keyMonitor: Any?
     private var scrollMonitor: Any?
+    private var magnifyMonitor: Any?
     private var slideshowTask: Task<Void, Never>?
     private var lastSizedURLs: [URL] = []
     private var folderWatchSource: DispatchSourceFileSystemObject?
@@ -181,8 +182,9 @@ final class AppState: ObservableObject {
     }
 
     deinit {
-        if let m = keyMonitor    { NSEvent.removeMonitor(m) }
-        if let m = scrollMonitor { NSEvent.removeMonitor(m) }
+        if let m = keyMonitor     { NSEvent.removeMonitor(m) }
+        if let m = scrollMonitor  { NSEvent.removeMonitor(m) }
+        if let m = magnifyMonitor { NSEvent.removeMonitor(m) }
         slideshowTask?.cancel()
     }
 
@@ -626,6 +628,22 @@ final class AppState: ObservableObject {
             let delta = event.scrollingDeltaY
             guard delta != 0 else { return nil }
             let factor: CGFloat = delta > 0 ? 1.08 : 0.93
+            guard let contentView = event.window?.contentView else { return nil }
+            let bounds = contentView.bounds
+            let loc = event.locationInWindow
+            let anchor = CGSize(
+                width:  loc.x - bounds.width  / 2,
+                height: -(loc.y - bounds.height / 2)
+            )
+            DispatchQueue.main.async {
+                withAnimation(.interactiveSpring()) { self.applyZoom(factor: factor, anchor: anchor) }
+            }
+            return nil
+        }
+
+        magnifyMonitor = NSEvent.addLocalMonitorForEvents(matching: .magnify) { [weak self] event in
+            guard let self, self.viewMode == .fullImage, !self.showMetadataPanel else { return event }
+            let factor = 1.0 + event.magnification
             guard let contentView = event.window?.contentView else { return nil }
             let bounds = contentView.bounds
             let loc = event.locationInWindow
