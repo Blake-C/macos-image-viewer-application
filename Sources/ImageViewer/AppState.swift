@@ -144,6 +144,7 @@ final class AppState: ObservableObject {
     // MARK: - Open-folder trigger (per-window, replaces notification)
 
     @Published var openFolderRequested: Bool = false
+    @Published var needsScrollToSelected: Bool = false
 
     // MARK: - Recent folders
 
@@ -1017,7 +1018,8 @@ final class AppState: ObservableObject {
         slideshowTask = nil
         slideshowActive = false
         isSlideshowTransition = false
-        keyboardNavigated = true   // ensure GalleryView scrolls to the current image
+        keyboardNavigated = false
+        needsScrollToSelected = true
         // Cancel any in-flight Ken Burns animation — snap zoom immediately
         var snap = Transaction()
         snap.disablesAnimations = true

@@ -49,7 +49,16 @@ struct GalleryView: View {
                     .onChange(of: state.selectedIndex) { _, newIdx in
                         guard state.keyboardNavigated,
                               state.imageURLs.indices.contains(newIdx) else { return }
-                        proxy.scrollTo(state.imageURLs[newIdx])
+                        proxy.scrollTo(state.imageURLs[newIdx], anchor: .center)
+                    }
+                    .onChange(of: state.needsScrollToSelected) { _, needs in
+                        guard needs, state.imageURLs.indices.contains(state.selectedIndex) else { return }
+                        state.needsScrollToSelected = false
+                        let url = state.imageURLs[state.selectedIndex]
+                        // Delay past the gallery transition animation (~0.4s spring)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                            withAnimation { proxy.scrollTo(url, anchor: .center) }
+                        }
                     }
                     .onAppear {
                         state.galleryColumnCount = columnCount(for: geo.size.width)
