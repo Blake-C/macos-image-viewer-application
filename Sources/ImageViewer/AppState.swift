@@ -163,6 +163,7 @@ final class AppState: ObservableObject {
         didSet { _availableFileTypes = nil }   // invalidate cache on sort
     }
     private var modDateCache: [URL: Date] = [:]
+    private var fileSizeCache: [URL: Int] = [:]
     private var _availableFileTypes: [String]? = nil
     private(set) var currentFolder: URL?
 
@@ -343,12 +344,13 @@ final class AppState: ObservableObject {
         let urls = unsortedURLs
         let currentURL = imageURLs.indices.contains(selectedIndex) ? imageURLs[selectedIndex] : nil
 
-        let (sorted, cache) = await Task.detached(priority: .userInitiated) {
+        let (sorted, dateCache, sizeCache) = await Task.detached(priority: .userInitiated) {
             Self.sortAndCache(urls, by: option)
         }.value
 
-        sortedURLs = sorted
-        modDateCache = cache
+        sortedURLs    = sorted
+        modDateCache  = dateCache
+        fileSizeCache = sizeCache
         applyFiltersNow(resetSelection: resetSelection,
                         preserveURL: resetSelection ? nil : currentURL)
     }
@@ -401,14 +403,19 @@ final class AppState: ObservableObject {
         // Persist settings after every sort/filter operation (not during restore)
         if !restoringSettings { saveFolderSettings() }
 
-        // Recompute total file size off-thread (skip if URLs haven't changed)
-        let urls = imageURLs
+        // Recompute total file size (skip if URLs haven't changed)
+        let urls      = imageURLs
+        let sizeCache = fileSizeCache
         guard urls != lastSizedURLs else { return }
         lastSizedURLs = urls
         Task.detached(priority: .utility) {
             let size = urls.reduce(into: Int64(0)) { total, url in
-                let v = try? url.resourceValues(forKeys: [.fileSizeKey])
-                total += Int64(v?.fileSize ?? 0)
+                if let cached = sizeCache[url] {
+                    total += Int64(cached)
+                } else {
+                    let v = try? url.resourceValues(forKeys: [.fileSizeKey])
+                    total += Int64(v?.fileSize ?? 0)
+                }
             }
             await MainActor.run { self.totalFileSize = size }
         }
@@ -1025,21 +1032,33 @@ final class AppState: ObservableObject {
 
     // MARK: - Sort (off main thread)
 
-    private static func sortAndCache(_ urls: [URL], by option: SortOption) -> ([URL], [URL: Date]) {
-        // Only fetch modification dates when the sort actually needs them
-        var cache: [URL: Date] = [:]
+    private static func sortAndCache(_ urls: [URL], by option: SortOption) -> ([URL], [URL: Date], [URL: Int]) {
+        var dateCache: [URL: Date] = [:]
+        var sizeCache: [URL: Int]  = [:]
+
         if option == .newestFirst || option == .oldestFirst {
             for url in urls {
                 if let vals = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
                    let date = vals.contentModificationDate {
-                    cache[url] = date
+                    dateCache[url] = date
                 }
             }
         }
-        return (sort(urls, by: option, dateCache: cache), cache)
+
+        if option == .largestFirst || option == .smallestFirst {
+            for url in urls {
+                if let vals = try? url.resourceValues(forKeys: [.fileSizeKey]),
+                   let size = vals.fileSize {
+                    sizeCache[url] = size
+                }
+            }
+        }
+
+        return (sort(urls, by: option, dateCache: dateCache, sizeCache: sizeCache), dateCache, sizeCache)
     }
 
-    private static func sort(_ urls: [URL], by option: SortOption, dateCache: [URL: Date]) -> [URL] {
+    private static func sort(_ urls: [URL], by option: SortOption,
+                             dateCache: [URL: Date], sizeCache: [URL: Int] = [:]) -> [URL] {
         switch option {
         case .nameAZ:
             return urls.sorted {
@@ -1057,8 +1076,7 @@ final class AppState: ObservableObject {
             }
         case .largestFirst, .smallestFirst:
             let pairs: [(URL, Int)] = urls.compactMap { url in
-                let vals = try? url.resourceValues(forKeys: [.fileSizeKey])
-                guard let size = vals?.fileSize else { return nil }
+                guard let size = sizeCache[url] else { return nil }
                 return (url, size)
             }
             let sorted = pairs.sorted { option == .largestFirst ? $0.1 > $1.1 : $0.1 < $1.1 }
