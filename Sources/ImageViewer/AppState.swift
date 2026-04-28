@@ -40,6 +40,7 @@ final class AppState: ObservableObject {
         var squareThumbnails: Bool
         var masonryLayout: Bool
         var thumbnailSize: CGFloat
+        var scanRecursively: Bool
     }
 
     /// True while restoring settings from disk — suppresses redundant saves & sort triggers.
@@ -68,6 +69,15 @@ final class AppState: ObservableObject {
         didSet {
             guard !restoringSettings, currentFolder != nil else { return }
             saveFolderSettings()
+        }
+    }
+    @Published var scanRecursively: Bool = false {
+        didSet {
+            guard !restoringSettings, currentFolder != nil else { return }
+            saveFolderSettings()
+            if let folder = currentFolder {
+                Task { await refreshCurrentFolder(folder: folder) }
+            }
         }
     }
     @Published var keyboardNavigated: Bool = false
@@ -282,10 +292,16 @@ final class AppState: ObservableObject {
                 squareThumbnails  = saved.squareThumbnails
                 masonryLayout     = saved.masonryLayout
                 thumbnailSize     = saved.thumbnailSize > 0 ? saved.thumbnailSize : 160
+                scanRecursively   = saved.scanRecursively
                 restoringSettings = false
             }
         }
-        unsortedURLs = urls
+        // If recursive scanning is enabled, re-scan now that settings are restored
+        if let folder, scanRecursively {
+            unsortedURLs = await FolderScanner.scan(directory: folder, recursive: true)
+        } else {
+            unsortedURLs = urls
+        }
         ImageLoader.clearThumbnailCache()
         await applyCurrentSort(resetSelection: true)
     }
@@ -411,7 +427,8 @@ final class AppState: ObservableObject {
             showFavoritesOnly: showFavoritesOnly,
             squareThumbnails:  squareThumbnails,
             masonryLayout:     masonryLayout,
-            thumbnailSize:     thumbnailSize
+            thumbnailSize:     thumbnailSize,
+            scanRecursively:   scanRecursively
         )
         var all = cachedFolderSettings()
         all[folder.path] = settings
@@ -439,9 +456,9 @@ final class AppState: ObservableObject {
 
     // MARK: - Refresh
 
-    func refreshCurrentFolder() async {
-        guard let folder = currentFolder else { return }
-        let urls = await FolderScanner.scan(directory: folder)
+    func refreshCurrentFolder(folder: URL? = nil) async {
+        guard let folder = folder ?? currentFolder else { return }
+        let urls = await FolderScanner.scan(directory: folder, recursive: scanRecursively)
         unsortedURLs = urls
         folderVersion += 1
         ImageLoader.clearThumbnailCache()

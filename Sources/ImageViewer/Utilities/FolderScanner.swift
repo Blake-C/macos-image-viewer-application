@@ -39,8 +39,11 @@ private extension NSOpenPanel {
 }
 
 extension FolderScanner {
-    static func scan(directory: URL) async -> [URL] {
+    static func scan(directory: URL, recursive: Bool = false) async -> [URL] {
         await Task.detached(priority: .userInitiated) {
+            if recursive {
+                return scanRecursive(directory: directory)
+            }
             guard let contents = try? FileManager.default
                 .contentsOfDirectory(
                     at: directory,
@@ -55,5 +58,25 @@ extension FolderScanner {
                     $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
                 }
         }.value
+    }
+
+    private static func scanRecursive(directory: URL) -> [URL] {
+        guard let enumerator = FileManager.default.enumerator(
+            at: directory,
+            includingPropertiesForKeys: [.isRegularFileKey, .isHiddenKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        ) else { return [] }
+
+        var results: [URL] = []
+        for case let url as URL in enumerator {
+            guard let vals = try? url.resourceValues(forKeys: [.isRegularFileKey]),
+                  vals.isRegularFile == true else { continue }
+            if FolderScanner.imageExtensions.contains(url.pathExtension.lowercased()) {
+                results.append(url)
+            }
+        }
+        return results.sorted {
+            $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+        }
     }
 }

@@ -74,6 +74,32 @@ struct FolderSettingsSheet: View {
 			}
 			.padding(16)
 
+			Divider()
+
+			VStack(alignment: .leading, spacing: 14) {
+				Text("Scanning")
+					.font(.caption)
+					.foregroundStyle(.secondary)
+					.textCase(.uppercase)
+
+				HStack(alignment: .top, spacing: 12) {
+					VStack(alignment: .leading, spacing: 4) {
+						Text("Include Subfolders")
+							.font(.system(size: 13, weight: .medium))
+						Text("Scan all nested subfolders for images, not just the top-level folder.")
+							.font(.caption)
+							.foregroundStyle(.secondary)
+							.fixedSize(horizontal: false, vertical: true)
+					}
+
+					Spacer(minLength: 16)
+
+					Toggle("", isOn: $state.scanRecursively)
+						.labelsHidden()
+				}
+			}
+			.padding(16)
+
 			Spacer(minLength: 0)
 		}
 		.frame(width: 340)
