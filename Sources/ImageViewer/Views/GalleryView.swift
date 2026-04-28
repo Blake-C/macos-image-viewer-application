@@ -401,6 +401,15 @@ private struct MultiSelectBar: View {
             .buttonStyle(.plain)
             .foregroundStyle(.white.opacity(0.8))
 
+            Button {
+                Task { await state.moveSelectedToFolder() }
+            } label: {
+                Label("Move to Folder", systemImage: "folder")
+                    .font(.system(size: 12))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.white.opacity(0.8))
+
             Button(role: .destructive) {
                 state.trashSelected()
             } label: {

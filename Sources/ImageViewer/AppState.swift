@@ -504,6 +504,39 @@ final class AppState: ObservableObject {
         NSPasteboard.general.setString(paths, forType: .string)
     }
 
+    @MainActor
+    func moveSelectedToFolder() async {
+        let toMove = selectedURLs
+        guard !toMove.isEmpty else { return }
+
+        let panel = NSOpenPanel()
+        panel.canChooseFiles       = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose a destination folder"
+        panel.prompt  = "Move Here"
+        panel.title   = "Move \(toMove.count) Image\(toMove.count == 1 ? "" : "s")"
+
+        guard await panel.begin() == .OK, let destination = panel.url else { return }
+
+        suppressFolderRefresh = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            self?.suppressFolderRefresh = false
+        }
+
+        selectedURLs.removeAll()
+
+        for url in toMove {
+            let dest = destination.appendingPathComponent(url.lastPathComponent)
+            try? FileManager.default.moveItem(at: url, to: dest)
+            unsortedURLs.removeAll { $0 == url }
+            sortedURLs.removeAll   { $0 == url }
+            imageURLs.removeAll    { $0 == url }
+        }
+
+        selectedIndex = min(selectedIndex, max(0, imageURLs.count - 1))
+    }
+
     // MARK: - Delete
 
     @MainActor
