@@ -77,27 +77,6 @@ struct GalleryView: View {
                     .onChange(of: state.thumbnailSize) { _, _ in
                         state.galleryColumnCount = columnCount(for: geo.size.width)
                     }
-                    .onDrop(of: [.folder, .fileURL], isTargeted: $isDragTargeted) { providers in
-                        guard let provider = providers.first else { return false }
-                        // Finder exposes dragged items as raw file-URL data, not as URL objects.
-                        // loadDataRepresentation is the reliable path for macOS Finder drags.
-                        _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, _ in
-                            guard let data,
-                                  let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
-                            var isDir: ObjCBool = false
-                            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),
-                                  isDir.boolValue else { return }
-                            Task { @MainActor in
-                                let images = await FolderScanner.scan(directory: url)
-                                await state.loadImages(images, from: url)
-                                state.viewMode = .gallery
-                            }
-                        }
-                        return true
-                    }
-                    .overlay {
-                        if isDragTargeted { FolderDropOverlay() }
-                    }
                 }
             }
 
@@ -108,8 +87,25 @@ struct GalleryView: View {
                     .zIndex(2)
             }
 
+            // Full-window drag target visual overlay
+            if isDragTargeted {
+                FolderDropOverlay()
+                    .zIndex(10)
+                    .transition(.opacity)
+            }
         }
+        .animation(.easeInOut(duration: 0.15), value: isDragTargeted)
         .animation(.easeInOut(duration: 0.2), value: state.selectedURLs.isEmpty)
+        // AppKit-backed drop receiver covering the entire view (SwiftUI .onDrop is unreliable for Finder folders)
+        .overlay(
+            FolderDropReceiver(isTargeted: $isDragTargeted) { url in
+                Task { @MainActor in
+                    let images = await FolderScanner.scan(directory: url)
+                    await state.loadImages(images, from: url)
+                    state.viewMode = .gallery
+                }
+            }
+        )
         .onChange(of: state.focusSearchOnGalleryReturn) { _, focus in
             if focus {
                 state.focusSearchOnGalleryReturn = false
@@ -415,21 +411,103 @@ struct GalleryView: View {
 
 private struct FolderDropOverlay: View {
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 12)
         ZStack {
-            shape.stroke(Color.accentColor, lineWidth: 3)
-            shape.fill(Color.accentColor.opacity(0.08))
-            VStack(spacing: 8) {
+            // Dimming layer
+            Color.black.opacity(0.55)
+                .ignoresSafeArea()
+            // Border ring
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.accentColor, lineWidth: 3)
+                .padding(6)
+            // Content
+            VStack(spacing: 12) {
                 Image(systemName: "folder.badge.plus")
-                    .font(.system(size: 36))
+                    .font(.system(size: 52, weight: .light))
                     .foregroundStyle(Color.accentColor)
-                Text("Drop folder to open")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Color.accentColor)
+                Text("Drop Folder to Open")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
             }
         }
-        .padding(8)
         .allowsHitTesting(false)
+    }
+}
+
+// MARK: - AppKit-backed folder drop receiver
+
+private struct FolderDropReceiver: NSViewRepresentable {
+    @Binding var isTargeted: Bool
+    var onFolderDropped: (URL) -> Void
+
+    func makeNSView(context: Context) -> FolderDropNSView {
+        let view = FolderDropNSView()
+        view.onFolderDropped = onFolderDropped
+        view.onTargetedChanged = { [weak view] targeted in
+            guard view != nil else { return }
+            DispatchQueue.main.async { self.isTargeted = targeted }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: FolderDropNSView, context: Context) {
+        nsView.onFolderDropped = onFolderDropped
+        nsView.onTargetedChanged = { targeted in
+            DispatchQueue.main.async { self.isTargeted = targeted }
+        }
+    }
+
+    class FolderDropNSView: NSView {
+        var onFolderDropped: ((URL) -> Void)?
+        var onTargetedChanged: ((Bool) -> Void)?
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            registerForDraggedTypes([.fileURL])
+        }
+
+        required init?(coder: NSCoder) {
+            super.init(coder: coder)
+            registerForDraggedTypes([.fileURL])
+        }
+
+        // Pass through all normal mouse events — drag protocol is separate from hit testing
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        private func folderURL(from info: NSDraggingInfo) -> URL? {
+            let options: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
+            let urls = info.draggingPasteboard
+                .readObjects(forClasses: [NSURL.self], options: options) as? [URL] ?? []
+            return urls.first { url in
+                var isDir: ObjCBool = false
+                return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
+                    && isDir.boolValue
+            }
+        }
+
+        override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+            guard folderURL(from: sender) != nil else { return [] }
+            onTargetedChanged?(true)
+            return .copy
+        }
+
+        override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+            guard folderURL(from: sender) != nil else { return [] }
+            return .copy
+        }
+
+        override func draggingExited(_ sender: NSDraggingInfo?) {
+            onTargetedChanged?(false)
+        }
+
+        override func draggingEnded(_ sender: NSDraggingInfo) {
+            onTargetedChanged?(false)
+        }
+
+        override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+            guard let url = folderURL(from: sender) else { return false }
+            onFolderDropped?(url)
+            return true
+        }
     }
 }
 
