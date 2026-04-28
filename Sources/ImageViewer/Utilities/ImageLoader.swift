@@ -56,6 +56,14 @@ enum ImageLoader {
         }.value
     }
 
+    /// Returns the full ImageIO metadata dictionary for an image file.
+    static func rawMetadata(for url: URL) async -> [String: Any]? {
+        await Task.detached(priority: .userInitiated) {
+            guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+            return CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [String: Any]
+        }.value
+    }
+
     /// Clears the thumbnail cache (call when a folder is changed).
     static func clearThumbnailCache() {
         ThumbnailCache.shared.removeAll()

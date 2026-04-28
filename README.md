@@ -25,6 +25,7 @@ A fast, native macOS image gallery and viewer built with Swift and SwiftUI. No X
 - **Cmd+0** to reset zoom to fit
 - Arrow keys to navigate between images (or pan when zoomed in)
 - Image info overlay (**I**) — filename, pixel dimensions, file size, date modified
+- Metadata sheet (**M**) — full ImageIO metadata (General, TIFF, EXIF, GPS, IPTC, PNG); ComfyUI workflow images show parsed model, generation, and prompt sections; every field has a copy-to-clipboard button
 - Right-click context menu with the same actions as the gallery thumbnail menu
 - Trash button in the top-right corner
 
@@ -174,6 +175,7 @@ iconutil -c icns AppIcon.iconset
 | Cmd+0 | Reset zoom to fit |
 | Cmd+1 | Zoom to actual pixels (1:1) |
 | I | Toggle image info overlay |
+| M | Open metadata sheet |
 | Cmd+P | Start / stop slideshow |
 | Cmd+Delete | Move current image to Trash |
 | Cmd+S | Return to gallery and focus search |

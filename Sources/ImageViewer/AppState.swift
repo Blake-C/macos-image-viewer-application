@@ -73,11 +73,13 @@ final class AppState: ObservableObject {
     @Published var zoomScale: CGFloat = 1.0
     @Published var panOffset: CGSize = .zero
     @Published var showInfoOverlay: Bool = false
+    @Published var showMetadataPanel: Bool = false
     @Published var focusSearchOnGalleryReturn: Bool = false
     @Published var shouldFocusSearch: Bool = false
     @Published var totalFileSize: Int64 = 0
     @Published var fullImageViewSize: CGSize = .zero    // set by FullImageView GeometryReader
     @Published var currentImagePixelSize: CGSize? = nil  // set by FullImageView task
+    @Published var currentImageMetadata: [String: Any]? = nil  // set by FullImageView task
 
     // MARK: - Filters
 
@@ -589,12 +591,28 @@ final class AppState: ObservableObject {
         }
 
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-            guard let self else { return event }
-            if self.viewMode == .fullImage {
-                self.handleScrollWheel(event)
-                return nil
+            guard let self, self.viewMode == .fullImage else { return event }
+
+            // The local monitor fires for every window in the app, including the
+            // metadata sheet. While the sheet is open, pass all events through so
+            // the sheet's ScrollView can receive them. The main image window has no
+            // SwiftUI ScrollView, so passed-through events there are harmless.
+            if self.showMetadataPanel { return event }
+
+            let delta = event.scrollingDeltaY
+            guard delta != 0 else { return nil }
+            let factor: CGFloat = delta > 0 ? 1.08 : 0.93
+            guard let contentView = event.window?.contentView else { return nil }
+            let bounds = contentView.bounds
+            let loc = event.locationInWindow
+            let anchor = CGSize(
+                width:  loc.x - bounds.width  / 2,
+                height: -(loc.y - bounds.height / 2)
+            )
+            DispatchQueue.main.async {
+                withAnimation(.interactiveSpring()) { self.applyZoom(factor: factor, anchor: anchor) }
             }
-            return event
+            return nil
         }
     }
 
@@ -667,6 +685,10 @@ final class AppState: ObservableObject {
         switch event.keyCode {
         case 34:                // i — toggle info overlay
             showInfoOverlay.toggle()
+            return true
+
+        case 46:                // m — toggle metadata panel
+            showMetadataPanel.toggle()
             return true
 
         case 49:                // Space — same as Enter (toggle full image / back to gallery)
@@ -753,21 +775,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func handleScrollWheel(_ event: NSEvent) {
-        let delta = event.scrollingDeltaY
-        guard delta != 0 else { return }
-        let factor: CGFloat = delta > 0 ? 1.08 : 0.93
-        guard let window = NSApp.keyWindow, let contentView = window.contentView else { return }
-        let loc = event.locationInWindow
-        let bounds = contentView.bounds
-        let anchor = CGSize(width: loc.x - bounds.width / 2,
-                            height: -(loc.y - bounds.height / 2))
-        DispatchQueue.main.async {
-            withAnimation(.interactiveSpring()) { self.applyZoom(factor: factor, anchor: anchor) }
-        }
-    }
-
-    private func applyZoom(factor: CGFloat, anchor: CGSize) {
+    func applyZoom(factor: CGFloat, anchor: CGSize) {
         let newZoom = max(0.1, min(30.0, zoomScale * factor))
         let ratio = newZoom / zoomScale
         panOffset.width  = panOffset.width  * ratio + anchor.width  * (1 - ratio)
