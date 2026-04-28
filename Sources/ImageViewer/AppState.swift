@@ -707,6 +707,12 @@ final class AppState: ObservableObject {
         let cmd = event.modifierFlags.contains(.command)
 
         switch event.keyCode {
+        case 3:                 // f — toggle favorite
+            if imageURLs.indices.contains(selectedIndex) {
+                toggleFavorite(imageURLs[selectedIndex])
+            }
+            return true
+
         case 34:                // i — toggle info overlay
             showInfoOverlay.toggle()
             return true

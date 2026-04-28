@@ -177,6 +177,7 @@ iconutil -c icns AppIcon.iconset
 | Cmd++ / Cmd+- | Zoom in / out |
 | Cmd+0 | Reset zoom to fit |
 | Cmd+1 | Zoom to actual pixels (1:1) |
+| F | Toggle favorite |
 | I | Toggle image info overlay |
 | M | Open metadata sheet |
 | Cmd+P | Start / stop slideshow |
