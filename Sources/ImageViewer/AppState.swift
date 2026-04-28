@@ -292,9 +292,31 @@ final class AppState: ObservableObject {
             UserDefaults.standard.set(recentFolders.map(\.path), forKey: UDKey.recentFolders)
             return
         }
+
+        if FolderLockManager.shared.isLocked(url) {
+            NSApp.activate(ignoringOtherApps: true)
+            NSApp.windows.first?.makeKeyAndOrderFront(nil)
+            let authorized = await FolderLockManager.shared.authenticate(
+                for: url,
+                reason: "Authenticate to open \"\(url.lastPathComponent)\""
+            )
+            guard authorized else {
+                authFailed = true
+                pendingAuthFolder = url
+                viewMode = .folderPicker
+                return
+            }
+        }
+
         let images = await FolderScanner.scan(directory: url)
+        zoomScale = 1.0
+        panOffset = .zero
+        noImagesFound = images.isEmpty
+        folderVersion += 1
         await loadImages(images, from: url)
-        viewMode = .gallery
+        withAnimation {
+            viewMode = images.isEmpty ? .folderPicker : .gallery
+        }
     }
 
     // MARK: - Folder loading
