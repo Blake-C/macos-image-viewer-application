@@ -135,6 +135,10 @@ final class AppState: ObservableObject {
 
     @Published var openFolderRequested: Bool = false
 
+    // MARK: - Recent folders
+
+    @Published private(set) var recentFolders: [URL] = []
+
     // MARK: - Lock / auth state
 
     @Published var currentFolderIsLocked: Bool = false
@@ -171,6 +175,7 @@ final class AppState: ObservableObject {
         static let kenBurnsEnabled   = "kenBurnsEnabled"
         static let slideshowShuffle  = "slideshowShuffle"
         static let folderSettings    = "folderSettings"
+        static let recentFolders     = "recentFolders"
     }
 
     // MARK: - Init / deinit
@@ -185,6 +190,9 @@ final class AppState: ObservableObject {
         kenBurnsEnabled = ud.object(forKey: UDKey.kenBurnsEnabled) != nil
             ? ud.bool(forKey: UDKey.kenBurnsEnabled) : true   // on by default
         slideshowShuffle = ud.bool(forKey: UDKey.slideshowShuffle)
+        recentFolders = (ud.stringArray(forKey: UDKey.recentFolders) ?? [])
+            .map { URL(fileURLWithPath: $0) }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
         startMonitors()
     }
 
@@ -228,8 +236,29 @@ final class AppState: ObservableObject {
         return FileManager.default.fileExists(atPath: path) ? URL(fileURLWithPath: path) : nil
     }
 
+    private func recordRecentFolder(_ url: URL) {
+        var recents = recentFolders.filter { $0 != url }
+        recents.insert(url, at: 0)
+        if recents.count > 10 { recents = Array(recents.prefix(10)) }
+        recentFolders = recents
+        UserDefaults.standard.set(recents.map(\.path), forKey: UDKey.recentFolders)
+    }
+
     func requestOpenFolder() {
         openFolderRequested = true
+    }
+
+    @MainActor
+    func openRecentFolder(_ url: URL) async {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            // Remove stale entry
+            recentFolders.removeAll { $0 == url }
+            UserDefaults.standard.set(recentFolders.map(\.path), forKey: UDKey.recentFolders)
+            return
+        }
+        let images = await FolderScanner.scan(directory: url)
+        await loadImages(images, from: url)
+        viewMode = .gallery
     }
 
     // MARK: - Folder loading
@@ -241,6 +270,7 @@ final class AppState: ObservableObject {
             refreshLockState()
             startWatchingFolder(folder)
             UserDefaults.standard.set(folder.path, forKey: UDKey.lastFolderPath)
+            recordRecentFolder(folder)
             if let saved = loadFolderSettings(for: folder) {
                 restoringSettings = true
                 sortOption        = saved.sortOption

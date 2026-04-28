@@ -270,6 +270,28 @@ struct GalleryView: View {
                 .buttonStyle(.plain)
                 .help("Refresh folder")
 
+                // Recent folders
+                if !state.recentFolders.isEmpty {
+                    Menu {
+                        ForEach(state.recentFolders, id: \.self) { url in
+                            Button {
+                                Task { await state.openRecentFolder(url) }
+                            } label: {
+                                Text(url.lastPathComponent)
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(.white)
+                            .padding(8)
+                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(.plain)
+                    .help("Recent folders")
+                }
+
                 // Settings
                 Button {
                     showSettings = true
