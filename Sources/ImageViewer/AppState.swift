@@ -978,8 +978,12 @@ final class AppState: ObservableObject {
             if imageURLs.isEmpty { viewMode = .gallery }
             return true
 
-        case 53:            // Escape — stop slideshow and back to gallery
-            returnToGallery()
+        case 53:            // Escape — dismiss metadata panel first; second press returns to gallery
+            if showMetadataPanel {
+                showMetadataPanel = false
+            } else {
+                returnToGallery()
+            }
             return true
 
         case 1 where cmd:   // Cmd+S — back to gallery and focus search
@@ -1048,6 +1052,7 @@ final class AppState: ObservableObject {
         slideshowTask = nil
         slideshowActive = false
         isSlideshowTransition = false
+        showMetadataPanel = false
         keyboardNavigated = false
         needsScrollToSelected = true
         // Cancel any in-flight Ken Burns animation — snap zoom immediately
