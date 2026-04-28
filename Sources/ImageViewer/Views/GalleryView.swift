@@ -83,6 +83,7 @@ struct GalleryView: View {
                     }
                     .onAppear {
                         state.galleryColumnCount = columnCount(for: geo.size.width)
+                        state.masonryColumnCount = masonryColumnCount(for: geo.size.width)
                         DispatchQueue.main.async {
                             if state.focusSearchOnGalleryReturn {
                                 state.focusSearchOnGalleryReturn = false
@@ -94,6 +95,7 @@ struct GalleryView: View {
                     }
                     .onChange(of: geo.size.width) { _, w in
                         state.galleryColumnCount = columnCount(for: w)
+                        state.masonryColumnCount = masonryColumnCount(for: w)
                     }
                     .onChange(of: state.thumbnailSize) { _, _ in
                         state.galleryColumnCount = columnCount(for: geo.size.width)

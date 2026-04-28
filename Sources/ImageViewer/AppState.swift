@@ -82,6 +82,7 @@ final class AppState: ObservableObject {
     }
     @Published var keyboardNavigated: Bool = false
     @Published var galleryColumnCount: Int = 5
+    @Published var masonryColumnCount: Int = 2
 
     // MARK: - Sort
 
@@ -861,11 +862,11 @@ final class AppState: ObservableObject {
         case 124: navigate(+1,                keyboard: true); return true
         case 125:
             if opt { navigate(imageURLs.count - 1 - selectedIndex, keyboard: true) }
-            else   { navigate(+galleryColumnCount, keyboard: true) }
+            else   { navigate(+(masonryLayout ? masonryColumnCount : galleryColumnCount), keyboard: true) }
             return true
         case 126:
             if opt { navigate(-selectedIndex, keyboard: true) }
-            else   { navigate(-galleryColumnCount, keyboard: true) }
+            else   { navigate(-(masonryLayout ? masonryColumnCount : galleryColumnCount), keyboard: true) }
             return true
         case 36, 49:        // Enter or Space — open image
             withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
