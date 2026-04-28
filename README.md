@@ -8,28 +8,34 @@ A fast, native macOS image gallery and viewer built with Swift and SwiftUI. No X
 
 ### Gallery
 - Grid view of all images in a folder with thumbnail previews
+- Adjustable thumbnail size via slider in the toolbar (100–280px, persisted per folder)
 - Square or aspect-ratio thumbnail mode (toggle with **Cmd+T**)
 - Masonry layout mode — variable-height columns sized to each image's natural aspect ratio
 - Sort by name, date modified, or file size (ascending or descending)
 - Search by filename (**Cmd+S** to focus search field)
-- Filter by file type (JPEG, PNG, HEIC, etc.)
+- Filter by file type (JPEG, PNG, HEIC, RAW, etc.)
 - Filter by date range (modified date)
 - Favorites — star images and filter to show only favorites
 - Multi-select with **Cmd+click** (individual) or **Shift+click** (range)
-- Remembers your sort, filters, and view settings per folder
+- Remembers your sort, filters, thumbnail size, and view settings per folder
 - Auto-refreshes when files are added, removed, or renamed in the folder
+- Optional recursive subfolder scanning (toggled in folder settings)
+- Recent folders list — quick access to the last 10 opened folders via the toolbar
+- Drag a folder onto the gallery window to open it; drag images out to Finder
 
 ### Full-Image View
 - Click any thumbnail to open the full image
-- Smooth zoom with scroll wheel, **Cmd++** / **Cmd+-**, or **Cmd+1** (actual pixels)
+- Smooth zoom with scroll wheel, trackpad pinch, **Cmd++** / **Cmd+-**, or **Cmd+1** (actual pixels)
 - Pan by dragging
 - **Cmd+0** to reset zoom to fit
 - Arrow keys to navigate between images (or pan when zoomed in)
+- Image position counter (e.g. 3 / 47) shown in the bottom-right corner
 - Image info overlay (**I**) — filename, pixel dimensions, file size, date modified
 - Metadata sheet (**M**) — full ImageIO metadata (General, TIFF, EXIF, GPS, IPTC, PNG); ComfyUI workflow images show parsed model, generation, and prompt sections; every field has a copy-to-clipboard button
 - Right-click context menu with the same actions as the gallery thumbnail menu
 - Play/pause slideshow button in the top-right corner (**Cmd+P**)
 - Trash button in the top-right corner
+- Returns to gallery scrolled to the current image
 
 ### Slideshow
 - Press **Cmd+P** to start/stop a slideshow (or use the play/pause button in the full-image toolbar)
@@ -47,6 +53,7 @@ A fast, native macOS image gallery and viewer built with Swift and SwiftUI. No X
 
 ### Multi-select Actions
 - Move selected images to Trash
+- Move selected images to another folder
 - Copy file paths to clipboard
 
 ### Thumbnail Context Menu (right-click)
@@ -61,13 +68,14 @@ A fast, native macOS image gallery and viewer built with Swift and SwiftUI. No X
 ### Full-Image Context Menu (right-click)
 - Same actions as the thumbnail context menu
 
-### Folder Security
+### Folder Security & Settings
 - Lock any open folder with Touch ID via the gear icon in the gallery toolbar
 - Authentication is required each time a locked folder is opened — including on app launch
 - Falls back to your macOS login password if Touch ID is unavailable
 - Lock state is stored per-folder in UserDefaults and enforced via macOS LocalAuthentication
 - Disabling a lock requires Touch ID or your login password
 - Locked folders show a lock icon in the toolbar gear button
+- Toggle recursive subfolder scanning per-folder in the settings sheet
 
 ### General
 - Multiple independent windows (**Cmd+N**), each with its own folder and state
@@ -75,8 +83,9 @@ A fast, native macOS image gallery and viewer built with Swift and SwiftUI. No X
 - Refresh folder (**Cmd+R**)
 - Open folder (**Cmd+O**)
 - Remembers the last opened folder across launches
-- Per-folder settings persistence (sort, filters, thumbnail mode)
+- Per-folder settings persistence (sort, filters, thumbnail size, layout mode, recursive scan)
 - Window title bar shows folder name, image count, and total file size — updates live
+- Favorites persist using file bookmarks — survive renames and moves within a volume
 
 ## Supported Formats
 
@@ -212,7 +221,7 @@ Sources/ImageViewer/
 │   ├── MetadataPanelView.swift  # Full ImageIO + ComfyUI metadata sheet
 │   ├── SlideshowControlsOverlay.swift
 │   ├── InfoOverlayView.swift    # Image metadata HUD
-│   └── FolderSettingsSheet.swift  # Touch ID lock toggle
+│   └── FolderSettingsSheet.swift  # Touch ID lock and recursive scan toggle
 └── Utilities/
     ├── ImageLoader.swift            # Async image loading with LRU thumbnail cache
     ├── FolderScanner.swift          # Async directory enumeration
@@ -224,13 +233,16 @@ Sources/ImageViewer/
 
 - Built with **SwiftUI + AppKit** on **Swift Package Manager** — no Xcode project file
 - Minimum deployment target: **macOS 14**
-- Thumbnail loading is fully asynchronous with an in-memory LRU cache (400 entries)
-- Directory scanning runs off the main thread to avoid UI freezes on large folders
+- Thumbnail loading is fully asynchronous with an in-memory LRU cache keyed on `(url, size)` — prevents blurry thumbnails when switching between grid and masonry layouts
+- Directory scanning runs off the main thread to avoid UI freezes on large folders; optional recursive mode uses `FileManager.enumerator`
 - Each window owns an independent `AppState` object — windows don't share state
-- Per-folder settings are stored in `UserDefaults` as JSON, decoded once per launch and cached in memory
+- Per-folder settings are stored in `UserDefaults` as JSON, capped at 50 entries to prevent unbounded growth
 - Folder changes are detected via `DispatchSource` file system events with a 0.5s debounce
 - In-app deletions suppress the folder watcher to avoid redundant refreshes
 - Folder lock state is stored in `UserDefaults`; authentication is enforced via `LAContext.evaluatePolicy(.deviceOwnerAuthentication)` which gates access with Touch ID or the macOS login password
+- Favorites use `URL.bookmarkData()` for persistence, so starred images survive renames and moves within a volume; path-based fallback handles migration from older data
+- File sizes and modification dates are cached during sort, eliminating redundant disk reads on re-sort
+- Trackpad pinch-to-zoom uses an `NSEvent.magnify` local monitor alongside the scroll-wheel zoom monitor
 
 ## License
 
