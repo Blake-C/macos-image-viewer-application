@@ -75,7 +75,7 @@ struct MetadataPanelView: View {
 
 	private var metadataList: some View {
 		ScrollView {
-			LazyVStack(alignment: .leading, spacing: 0) {
+			VStack(alignment: .leading, spacing: 0) {
 				ForEach(sections) { section in
 					sectionHeader(section.title)
 					ForEach(section.items) { row in
@@ -549,7 +549,6 @@ private struct SimpleMetadataRow: View {
 			Text(value)
 				.font(.system(size: 12))
 				.frame(maxWidth: .infinity, alignment: .leading)
-				.lineLimit(5)
 				.textSelection(.enabled)
 				.fixedSize(horizontal: false, vertical: true)
 
@@ -622,7 +621,6 @@ private struct SubItemRow: View {
 			Text(value)
 				.font(.system(size: 12))
 				.frame(maxWidth: .infinity, alignment: .leading)
-				.lineLimit(6)
 				.textSelection(.enabled)
 				.fixedSize(horizontal: false, vertical: true)
 
