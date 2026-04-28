@@ -23,13 +23,16 @@ struct MetadataPanelView: View {
 	var imageURL: URL? = nil
 	@EnvironmentObject var state: AppState
 
+	@State private var parsedWorkflow: ComfyUIWorkflow? = nil
+	@State private var workflowLoading = true
+
 	private var sections: [MetadataSection] { buildSections() }
 
 	var body: some View {
 		VStack(spacing: 0) {
 			sheetHeader
 			Divider()
-			if sections.isEmpty {
+			if sections.isEmpty && !workflowLoading {
 				emptyState
 			} else {
 				metadataList
@@ -38,6 +41,15 @@ struct MetadataPanelView: View {
 		.frame(minWidth: 520, idealWidth: 600, minHeight: 480, idealHeight: 720)
 		.background(Color(nsColor: .windowBackgroundColor))
 		.preferredColorScheme(.dark)
+		.task {
+			let meta = metadata
+			let url = imageURL
+			let wf = await Task.detached(priority: .userInitiated) {
+				MetadataPanelView.findWorkflow(metadata: meta, imageURL: url)
+			}.value
+			parsedWorkflow = wf
+			workflowLoading = false
+		}
 	}
 
 	// MARK: - Subviews
@@ -105,8 +117,8 @@ struct MetadataPanelView: View {
 	private func buildSections() -> [MetadataSection] {
 		var result: [MetadataSection] = []
 
-		// ComfyUI workflow JSON — detected from IPTC caption, shown first
-		buildComfyUISections(to: &result)
+		// ComfyUI workflow JSON — parsed async, shown first
+		buildComfyUISections(workflow: parsedWorkflow, loading: workflowLoading, to: &result)
 
 		addSection(
 			title: "General",
@@ -154,7 +166,7 @@ struct MetadataPanelView: View {
 
 	// MARK: - ComfyUI workflow detection
 
-	private func findComfyUIWorkflow() -> ComfyUIWorkflow? {
+	private nonisolated static func findWorkflow(metadata: [String: Any], imageURL: URL?) -> ComfyUIWorkflow? {
 		// 1. IPTC caption — the normal path for most formats
 		if let iptcDict = metadata[kCGImagePropertyIPTCDictionary as String] as? [String: Any],
 		   let captionRaw = iptcDict[kCGImagePropertyIPTCCaptionAbstract as String] {
@@ -179,8 +191,14 @@ struct MetadataPanelView: View {
 		return nil
 	}
 
-	private func buildComfyUISections(to sections: inout [MetadataSection]) {
-		guard let wf = findComfyUIWorkflow() else { return }
+	private func buildComfyUISections(workflow: ComfyUIWorkflow?, loading: Bool, to sections: inout [MetadataSection]) {
+		if loading {
+			sections.append(MetadataSection(title: "ComfyUI", items: [
+				MetadataRow(key: "Status", value: "Parsing workflow…", subItems: []),
+			]))
+			return
+		}
+		guard let wf = workflow else { return }
 
 		// Model section
 		var modelRows: [MetadataRow] = []
@@ -596,26 +614,52 @@ private struct SimpleMetadataRow: View {
 	let key: String
 	let value: String
 	@State private var copied = false
+	@State private var expanded = false
+
+	private static let truncationLimit = 400
+
+	private var isTruncatable: Bool { value.count > Self.truncationLimit }
+	private var displayValue: String {
+		guard isTruncatable && !expanded else { return value }
+		return String(value.prefix(Self.truncationLimit)) + "…"
+	}
 
 	var body: some View {
-		HStack(alignment: .top, spacing: 8) {
-			Text(key)
-				.font(.system(size: 12))
-				.foregroundStyle(.secondary)
-				.frame(width: 130, alignment: .leading)
-				.lineLimit(2)
-				.fixedSize(horizontal: false, vertical: true)
+		VStack(alignment: .leading, spacing: 0) {
+			HStack(alignment: .top, spacing: 8) {
+				Text(key)
+					.font(.system(size: 12))
+					.foregroundStyle(.secondary)
+					.frame(width: 130, alignment: .leading)
+					.lineLimit(2)
+					.fixedSize(horizontal: false, vertical: true)
 
-			Text(value)
-				.font(.system(size: 12))
-				.frame(maxWidth: .infinity, alignment: .leading)
-				.textSelection(.enabled)
-				.fixedSize(horizontal: false, vertical: true)
+				Text(displayValue)
+					.font(.system(size: 12))
+					.frame(maxWidth: .infinity, alignment: .leading)
+					.textSelection(.enabled)
+					.fixedSize(horizontal: false, vertical: true)
 
-			copyButton(value: value, copied: $copied)
+				copyButton(value: value, copied: $copied)
+			}
+			.padding(.horizontal, 20)
+			.padding(.top, 5)
+			.padding(.bottom, isTruncatable ? 2 : 5)
+
+			if isTruncatable {
+				Button {
+					withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+				} label: {
+					Text(expanded ? "Show less" : "Show more")
+						.font(.system(size: 11))
+						.foregroundStyle(.blue)
+				}
+				.buttonStyle(.plain)
+				.padding(.leading, 158)
+				.padding(.bottom, 5)
+				.accessibilityLabel(expanded ? "Collapse \(key)" : "Expand \(key)")
+			}
 		}
-		.padding(.horizontal, 20)
-		.padding(.vertical, 5)
 		.contentShape(Rectangle())
 	}
 }
