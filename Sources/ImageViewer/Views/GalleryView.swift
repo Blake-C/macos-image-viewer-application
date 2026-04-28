@@ -618,7 +618,10 @@ private struct ViewPopover: View {
                     .foregroundStyle(.secondary)
                     .textCase(.uppercase)
 
-                Picker("", selection: $state.masonryLayout) {
+                Picker("", selection: Binding(
+                    get: { state.masonryLayout },
+                    set: { newValue in withAnimation(.easeInOut(duration: 0.2)) { state.masonryLayout = newValue } }
+                )) {
                     Label("Grid", systemImage: "square.grid.2x2").tag(false)
                     Label("Masonry", systemImage: "rectangle.3.group").tag(true)
                 }
@@ -636,7 +639,10 @@ private struct ViewPopover: View {
                         .foregroundStyle(.secondary)
                         .textCase(.uppercase)
 
-                    Toggle(isOn: $state.squareThumbnails) {
+                    Toggle(isOn: Binding(
+                        get: { state.squareThumbnails },
+                        set: { newValue in withAnimation(.easeInOut(duration: 0.2)) { state.squareThumbnails = newValue } }
+                    )) {
                         Text("Square thumbnails")
                             .font(.system(size: 13))
                     }
