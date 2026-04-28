@@ -203,6 +203,26 @@ struct FullImageView: View {
 				.transition(.opacity)
 			}
 
+			// Image position counter (bottom-right, hidden during slideshow which shows its own)
+			if !state.slideshowActive, !state.imageURLs.isEmpty {
+				VStack {
+					Spacer()
+					HStack {
+						Spacer()
+						Text("\(state.selectedIndex + 1) / \(state.imageURLs.count)")
+							.font(.system(size: 11, weight: .medium))
+							.foregroundStyle(.white.opacity(0.55))
+							.monospacedDigit()
+							.padding(.horizontal, 8)
+							.padding(.vertical, 4)
+							.background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 6))
+							.padding([.trailing, .bottom], 12)
+					}
+				}
+				.allowsHitTesting(false)
+				.zIndex(3)
+			}
+
 			// Slideshow controls (bottom)
 			if state.slideshowActive {
 				VStack {
