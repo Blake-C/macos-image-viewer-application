@@ -49,7 +49,9 @@ struct GalleryView: View {
                     .onChange(of: state.selectedIndex) { _, newIdx in
                         guard state.keyboardNavigated,
                               state.imageURLs.indices.contains(newIdx) else { return }
-                        proxy.scrollTo(state.imageURLs[newIdx], anchor: .center)
+                        // No anchor — minimal scroll to make item visible.
+                        // anchor: .center requires O(n) layout work in a large grid.
+                        proxy.scrollTo(state.imageURLs[newIdx])
                     }
                     .onChange(of: state.needsScrollToSelected) { _, needs in
                         guard needs, state.imageURLs.indices.contains(state.selectedIndex) else { return }
