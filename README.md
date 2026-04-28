@@ -8,14 +8,16 @@ A fast, native macOS image gallery and viewer built with Swift and SwiftUI. No X
 
 ### Gallery
 - Grid view of all images in a folder with thumbnail previews
-- Adjustable thumbnail size via slider in the toolbar (100–280px, persisted per folder)
-- Square or aspect-ratio thumbnail mode (toggle with **Cmd+T**)
-- Masonry layout mode — variable-height columns sized to each image's natural aspect ratio
+- **View** button in the toolbar opens a popover for layout, thumbnail style, and size:
+  - Grid or Masonry layout toggle
+  - Square or aspect-ratio thumbnail mode (also **Cmd+T**)
+  - Adjustable thumbnail size slider (100–280px, persisted per folder)
+- **Filter** button opens a popover for favorites, file type, and date:
+  - Favorites — star images and filter to show only favorites
+  - Filter by file type (JPEG, PNG, HEIC, RAW, etc.)
+  - Filter by date range (modified date)
 - Sort by name, date modified, or file size (ascending or descending)
 - Search by filename (**Cmd+S** to focus search field)
-- Filter by file type (JPEG, PNG, HEIC, RAW, etc.)
-- Filter by date range (modified date)
-- Favorites — star images and filter to show only favorites
 - Multi-select with **Cmd+click** (individual) or **Shift+click** (range)
 - Remembers your sort, filters, thumbnail size, and view settings per folder
 - Auto-refreshes when files are added, removed, or renamed in the folder
