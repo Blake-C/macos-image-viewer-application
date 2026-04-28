@@ -416,6 +416,8 @@ final class AppState: ObservableObject {
     /// In-memory copy of the full settings dictionary — avoids decode on every save.
     private var folderSettingsCache: [String: FolderSettings]?
 
+    private static let folderSettingsLimit = 50
+
     private func saveFolderSettings() {
         guard let folder = currentFolder else { return }
         let settings = FolderSettings(
@@ -432,6 +434,18 @@ final class AppState: ObservableObject {
         )
         var all = cachedFolderSettings()
         all[folder.path] = settings
+
+        // Prune oldest entries if over limit, keeping recent folders first
+        if all.count > Self.folderSettingsLimit {
+            let sorted = recentFolders.map(\.path)
+            let keep = Set(sorted.prefix(Self.folderSettingsLimit))
+            all = all.filter { keep.contains($0.key) || $0.key == folder.path }
+            // If still over (e.g. no recentFolders populated), take arbitrary subset
+            if all.count > Self.folderSettingsLimit {
+                all = Dictionary(uniqueKeysWithValues: Array(all.prefix(Self.folderSettingsLimit)))
+            }
+        }
+
         folderSettingsCache = all
         if let data = try? JSONEncoder().encode(all) {
             UserDefaults.standard.set(data, forKey: UDKey.folderSettings)
