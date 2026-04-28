@@ -187,11 +187,32 @@ struct MetadataPanelView: View {
 		if let v = wf.checkpointName {
 			modelRows.append(MetadataRow(key: "Checkpoint", value: v, subItems: []))
 		}
+		if !wf.clipNames.isEmpty {
+			if wf.clipNames.count == 1 {
+				modelRows.append(MetadataRow(key: "CLIP", value: wf.clipNames[0], subItems: []))
+			} else {
+				modelRows.append(MetadataRow(key: "CLIP", value: "", subItems: wf.clipNames))
+			}
+		}
 		if let v = wf.vae {
 			modelRows.append(MetadataRow(key: "VAE", value: v, subItems: []))
 		}
 		if let v = wf.upscaleModel {
 			modelRows.append(MetadataRow(key: "Upscale Model", value: v, subItems: []))
+		}
+		if !wf.controlNets.isEmpty {
+			if wf.controlNets.count == 1 {
+				modelRows.append(MetadataRow(key: "ControlNet", value: wf.controlNets[0], subItems: []))
+			} else {
+				modelRows.append(MetadataRow(key: "ControlNet", value: "", subItems: wf.controlNets))
+			}
+		}
+		if !wf.ipAdapters.isEmpty {
+			if wf.ipAdapters.count == 1 {
+				modelRows.append(MetadataRow(key: "IP-Adapter", value: wf.ipAdapters[0], subItems: []))
+			} else {
+				modelRows.append(MetadataRow(key: "IP-Adapter", value: "", subItems: wf.ipAdapters))
+			}
 		}
 		if let v = wf.ollamaModel {
 			modelRows.append(MetadataRow(key: "Ollama Model", value: v, subItems: []))
@@ -212,15 +233,26 @@ struct MetadataPanelView: View {
 
 		// Generation section
 		var genRows: [MetadataRow] = []
+		if let (w, h) = wf.generationSize {
+			genRows.append(MetadataRow(key: "Target Size", value: "\(w) × \(h)", subItems: []))
+		}
 		let multiPass = wf.ksamplers.count > 1
 		for (i, ks) in wf.ksamplers.enumerated() {
 			let p = multiPass ? "[\(i + 1)] " : ""
-			if let v = ks.seed        { genRows.append(MetadataRow(key: "\(p)Seed",      value: "\(v)",                    subItems: [])) }
-			if let v = ks.steps       { genRows.append(MetadataRow(key: "\(p)Steps",     value: "\(v)",                    subItems: [])) }
-			if let v = ks.cfg         { genRows.append(MetadataRow(key: "\(p)CFG",       value: String(format: "%.2f", v), subItems: [])) }
-			if let v = ks.samplerName { genRows.append(MetadataRow(key: "\(p)Sampler",   value: v,                         subItems: [])) }
-			if let v = ks.scheduler   { genRows.append(MetadataRow(key: "\(p)Scheduler", value: v,                         subItems: [])) }
-			if let v = ks.denoise     { genRows.append(MetadataRow(key: "\(p)Denoise",   value: String(format: "%.4f", v), subItems: [])) }
+			if let v = ks.seed { genRows.append(MetadataRow(key: "\(p)Seed", value: "\(v)", subItems: [])) }
+			if let v = ks.steps {
+				genRows.append(MetadataRow(key: "\(p)Steps", value: "\(v)", subItems: []))
+			} else if let r = ks.stepsRange {
+				genRows.append(MetadataRow(key: "\(p)Steps", value: "\(r) (random)", subItems: []))
+			}
+			if let v = ks.cfg { genRows.append(MetadataRow(key: "\(p)CFG", value: String(format: "%.2f", v), subItems: [])) }
+			if let v = ks.samplerName { genRows.append(MetadataRow(key: "\(p)Sampler", value: v, subItems: [])) }
+			if let v = ks.scheduler { genRows.append(MetadataRow(key: "\(p)Scheduler", value: v, subItems: [])) }
+			if let v = ks.denoise {
+				genRows.append(MetadataRow(key: "\(p)Denoise", value: String(format: "%.4f", v), subItems: []))
+			} else if let r = ks.denoiseRange {
+				genRows.append(MetadataRow(key: "\(p)Denoise", value: "\(r) (random)", subItems: []))
+			}
 		}
 		addSection(title: "ComfyUI: Generation", items: genRows, to: &sections)
 
@@ -252,6 +284,18 @@ struct MetadataPanelView: View {
 			fileRows.append(MetadataRow(key: "Output Dir", value: v, subItems: []))
 		}
 		addSection(title: "ComfyUI: File", items: fileRows, to: &sections)
+
+		// Notes section
+		if !wf.workflowNotes.isEmpty {
+			let noteRows = wf.workflowNotes.enumerated().map { i, note in
+				MetadataRow(
+					key: wf.workflowNotes.count > 1 ? "Note \(i + 1)" : "Note",
+					value: note,
+					subItems: []
+				)
+			}
+			addSection(title: "ComfyUI: Notes", items: noteRows, to: &sections)
+		}
 	}
 
 	private func extractItems(from dict: [String: Any], keyMap: [String: String]) -> [MetadataRow] {
