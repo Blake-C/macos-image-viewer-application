@@ -8,7 +8,7 @@ struct ThumbnailCell: View {
     let isFavorite: Bool
     let squareThumbnails: Bool
     var masonry: Bool = false
-    var cellWidth: CGFloat = 160
+    var cellWidth: CGFloat = 160  // controls both grid cell size and masonry column width
     let onTap: () -> Void
     let onDelete: () -> Void
     let onToggleFavorite: () -> Void
@@ -31,7 +31,7 @@ struct ThumbnailCell: View {
                         .frame(height: masonry ? 180 : nil)
                 }
             }
-            .frame(width: masonry ? cellWidth : 160, height: masonry ? nil : 160)
+            .frame(width: cellWidth, height: masonry ? nil : cellWidth)
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
@@ -57,7 +57,7 @@ struct ThumbnailCell: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
         }
-        .frame(width: masonry ? cellWidth : 160, height: masonry ? nil : 160)
+        .frame(width: cellWidth, height: masonry ? nil : cellWidth)
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
         .contextMenu {
@@ -122,7 +122,7 @@ struct ThumbnailCell: View {
         }
         .id(url)
         .task(id: url) {
-            let size: CGFloat = masonry ? 800 : 320
+            let size: CGFloat = masonry ? 800 : cellWidth * 2
             thumbnail = await ImageLoader.thumbnail(for: url, size: size)
             // If the file returned nil it may still be writing — retry up to 3 times
             if thumbnail == nil {

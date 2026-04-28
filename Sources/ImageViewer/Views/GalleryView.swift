@@ -9,7 +9,10 @@ struct GalleryView: View {
     @State private var showSettings      = false
     @FocusState private var searchFocused: Bool
 
-    private let gridColumns = [GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 8)]
+    private var gridColumns: [GridItem] {
+        let sz = state.thumbnailSize
+        return [GridItem(.adaptive(minimum: sz, maximum: sz + 40), spacing: 8)]
+    }
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -27,6 +30,7 @@ struct GalleryView: View {
                                         isMultiSelected: state.selectedURLs.contains(url),
                                         isFavorite: state.isFavorite(url),
                                         squareThumbnails: state.squareThumbnails,
+                                        cellWidth: state.thumbnailSize,
                                         onTap: { state.handleThumbnailTap(url: url, atIndex: i) },
                                         onDelete: { state.deleteImage(at: url) },
                                         onToggleFavorite: { state.toggleFavorite(url) }
@@ -58,6 +62,9 @@ struct GalleryView: View {
                     }
                     .onChange(of: geo.size.width) { _, w in
                         state.galleryColumnCount = columnCount(for: w)
+                    }
+                    .onChange(of: state.thumbnailSize) { _, _ in
+                        state.galleryColumnCount = columnCount(for: geo.size.width)
                     }
                 }
             }
@@ -223,6 +230,25 @@ struct GalleryView: View {
                 .buttonStyle(.plain)
                 .help(state.masonryLayout ? "Switch to grid layout" : "Switch to masonry layout")
 
+                // Thumbnail size slider (grid mode only)
+                if !state.masonryLayout {
+                    HStack(spacing: 4) {
+                        Image(systemName: "photo")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.white.opacity(0.6))
+                        Slider(value: $state.thumbnailSize, in: 100...280, step: 10)
+                            .frame(width: 80)
+                            .tint(.white.opacity(0.8))
+                        Image(systemName: "photo")
+                            .font(.system(size: 14))
+                            .foregroundStyle(.white.opacity(0.6))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                    .help("Adjust thumbnail size")
+                }
+
                 // Refresh
                 Button {
                     guard !isRefreshing else { return }
@@ -327,7 +353,7 @@ struct GalleryView: View {
 
     private func columnCount(for width: CGFloat) -> Int {
         let available = width - 24
-        return max(1, Int(available / 168))
+        return max(1, Int(available / (state.thumbnailSize + 8)))
     }
 }
 
