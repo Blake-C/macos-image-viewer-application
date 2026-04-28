@@ -181,6 +181,7 @@ final class AppState: ObservableObject {
     private enum UDKey {
         static let lastFolderPath    = "lastFolderPath"
         static let favorites         = "favoriteImagePaths"
+        static let favoriteBookmarks = "favoriteImageBookmarks"
         static let slideshowInterval = "slideshowInterval"
         static let kenBurnsEnabled   = "kenBurnsEnabled"
         static let slideshowShuffle  = "slideshowShuffle"
@@ -192,9 +193,32 @@ final class AppState: ObservableObject {
 
     init() {
         let ud = UserDefaults.standard
-        favoriteURLs = Set(
-            (ud.stringArray(forKey: UDKey.favorites) ?? []).map { URL(fileURLWithPath: $0) }
-        )
+
+        // Load favorites from bookmarks (survives renames/moves), fall back to paths
+        var resolved: Set<URL> = []
+        if let bookmarkList = ud.array(forKey: UDKey.favoriteBookmarks) as? [Data] {
+            for data in bookmarkList {
+                var stale = false
+                if let url = try? URL(resolvingBookmarkData: data,
+                                      options: .withSecurityScope,
+                                      relativeTo: nil,
+                                      bookmarkDataIsStale: &stale) {
+                    resolved.insert(url)
+                } else if let url = try? URL(resolvingBookmarkData: data,
+                                             options: [],
+                                             relativeTo: nil,
+                                             bookmarkDataIsStale: &stale) {
+                    resolved.insert(url)
+                }
+            }
+        }
+        if resolved.isEmpty {
+            // First-run migration from old path-based storage
+            resolved = Set(
+                (ud.stringArray(forKey: UDKey.favorites) ?? []).map { URL(fileURLWithPath: $0) }
+            )
+        }
+        favoriteURLs = resolved
         let stored = ud.double(forKey: UDKey.slideshowInterval)
         slideshowInterval = stored > 0 ? stored : 3.0
         kenBurnsEnabled = ud.object(forKey: UDKey.kenBurnsEnabled) != nil
@@ -484,8 +508,19 @@ final class AppState: ObservableObject {
     func toggleFavorite(_ url: URL) {
         if favoriteURLs.contains(url) { favoriteURLs.remove(url) }
         else                          { favoriteURLs.insert(url) }
-        UserDefaults.standard.set(favoriteURLs.map(\.path), forKey: UDKey.favorites)
+        saveFavorites()
         if showFavoritesOnly { scheduleFilter() }
+    }
+
+    private func saveFavorites() {
+        let ud = UserDefaults.standard
+        // Save paths (legacy / readable)
+        ud.set(favoriteURLs.map(\.path), forKey: UDKey.favorites)
+        // Save bookmarks (survive renames and moves within a volume)
+        let bookmarks = favoriteURLs.compactMap {
+            try? $0.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
+        }
+        ud.set(bookmarks, forKey: UDKey.favoriteBookmarks)
     }
 
     func isFavorite(_ url: URL) -> Bool { favoriteURLs.contains(url) }
