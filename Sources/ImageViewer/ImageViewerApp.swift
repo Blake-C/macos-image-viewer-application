@@ -33,7 +33,7 @@ struct WindowContent: View {
     var body: some View {
         RootView()
             .environmentObject(state)
-            .focusedObject(state)       // exposes state to @FocusedObject in Commands
+            .focusedSceneObject(state)  // exposes state to @FocusedObject in Commands; scene-level variant resolves on launch without requiring prior user interaction
             .frame(minWidth: 900, minHeight: 600)
             .background(WindowAccessor(window: $window).ignoresSafeArea())
             .onChange(of: state.currentFolder)   { _, _ in updateTitle() }
