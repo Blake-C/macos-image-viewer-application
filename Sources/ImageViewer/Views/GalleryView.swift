@@ -5,10 +5,11 @@ import UniformTypeIdentifiers
 struct GalleryView: View {
     @EnvironmentObject var state: AppState
 
-    @State private var isRefreshing      = false
-    @State private var showFilterPopover = false
-    @State private var showSettings      = false
-    @State private var isDragTargeted    = false
+    @State private var isRefreshing        = false
+    @State private var showFilterPopover   = false
+    @State private var showSettings        = false
+    @State private var isDragTargeted      = false
+    @State private var pendingCenterScroll = false
     @FocusState private var searchFocused: Bool
 
     private var gridColumns: [GridItem] {
@@ -42,6 +43,16 @@ struct GalleryView: View {
                             .padding(12)
                             .padding(.bottom, state.selectedURLs.isEmpty ? 0 : 56)
                             .id(state.folderVersion)
+                            .background(
+                                GalleryScrollController(
+                                    selectedIndex: state.selectedIndex,
+                                    columnCount: state.galleryColumnCount,
+                                    cellSize: state.thumbnailSize,
+                                    keyboardNavigated: state.keyboardNavigated && !state.masonryLayout,
+                                    centerScroll: pendingCenterScroll,
+                                    onCenterHandled: { pendingCenterScroll = false }
+                                )
+                            )
                         }
                     }
                     .safeAreaInset(edge: .top, spacing: 0) { toolbarOverlay }
@@ -49,17 +60,25 @@ struct GalleryView: View {
                     .onChange(of: state.selectedIndex) { _, newIdx in
                         guard state.keyboardNavigated,
                               state.imageURLs.indices.contains(newIdx) else { return }
-                        // No anchor — minimal scroll to make item visible.
-                        // anchor: .center requires O(n) layout work in a large grid.
-                        proxy.scrollTo(state.imageURLs[newIdx])
+                        if state.masonryLayout {
+                            // Masonry: variable row heights, keep proxy-based scroll
+                            proxy.scrollTo(state.imageURLs[newIdx])
+                        }
+                        // Grid: handled by GalleryScrollController (O(1) math)
                     }
                     .onChange(of: state.needsScrollToSelected) { _, needs in
                         guard needs, state.imageURLs.indices.contains(state.selectedIndex) else { return }
                         state.needsScrollToSelected = false
-                        let url = state.imageURLs[state.selectedIndex]
-                        // Delay past the gallery transition animation (~0.4s spring)
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                            withAnimation { proxy.scrollTo(url, anchor: .center) }
+                        if state.masonryLayout {
+                            let url = state.imageURLs[state.selectedIndex]
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                                withAnimation { proxy.scrollTo(url, anchor: .center) }
+                            }
+                        } else {
+                            // Grid: fire math-based center scroll after gallery transition (~0.4s spring)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                                pendingCenterScroll = true
+                            }
                         }
                     }
                     .onAppear {
@@ -511,6 +530,62 @@ private struct FolderDropReceiver: NSViewRepresentable {
             return true
         }
     }
+}
+
+// MARK: - Math-based O(1) grid scroll controller
+
+private struct GalleryScrollController: NSViewRepresentable {
+	var selectedIndex: Int
+	var columnCount: Int
+	var cellSize: CGFloat
+	var keyboardNavigated: Bool
+	var centerScroll: Bool
+	var onCenterHandled: () -> Void
+
+	final class Coordinator {
+		var lastScrolledIndex: Int = -1
+	}
+
+	func makeCoordinator() -> Coordinator { Coordinator() }
+	func makeNSView(context: Context) -> NSView { NSView() }
+
+	func updateNSView(_ nsView: NSView, context: Context) {
+		guard columnCount > 0, selectedIndex >= 0 else { return }
+		guard keyboardNavigated || centerScroll else { return }
+		// For keyboard nav, only act when the index actually changed
+		guard centerScroll || selectedIndex != context.coordinator.lastScrolledIndex else { return }
+		context.coordinator.lastScrolledIndex = selectedIndex
+
+		let doCenter = centerScroll
+		if doCenter { onCenterHandled() }
+
+		DispatchQueue.main.async {
+			guard let sv = nsView.enclosingScrollView else { return }
+
+			let spacing: CGFloat = 8
+			let padding: CGFloat = 12
+			let row = selectedIndex / columnCount
+			let rowY = padding + CGFloat(row) * (cellSize + spacing)
+			let visible = sv.contentView.bounds
+
+			let targetY: CGFloat
+			if doCenter {
+				targetY = rowY - (visible.height - cellSize) / 2
+			} else {
+				if rowY < visible.minY {
+					targetY = max(0, rowY - padding)
+				} else if rowY + cellSize > visible.maxY {
+					targetY = rowY + cellSize - visible.height + padding
+				} else {
+					return
+				}
+			}
+
+			let clampedY = max(0, targetY)
+			sv.contentView.scroll(to: NSPoint(x: 0, y: clampedY))
+			sv.reflectScrolledClipView(sv.contentView)
+		}
+	}
 }
 
 // MARK: - Multi-select action bar
