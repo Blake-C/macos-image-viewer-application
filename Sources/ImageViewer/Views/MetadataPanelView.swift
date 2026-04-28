@@ -713,26 +713,52 @@ private struct SubItemRow: View {
 	let value: String
 	let parentKey: String
 	@State private var copied = false
+	@State private var expanded = false
+
+	private static let truncationLimit = 400
+
+	private var isTruncatable: Bool { value.count > Self.truncationLimit }
+	private var displayValue: String {
+		guard isTruncatable && !expanded else { return value }
+		return String(value.prefix(Self.truncationLimit)) + "…"
+	}
 
 	var body: some View {
-		HStack(alignment: .top, spacing: 8) {
-			Image(systemName: "circle.fill")
-				.font(.system(size: 4))
-				.foregroundStyle(.secondary)
-				.padding(.top, 4)
-				.frame(width: 10, alignment: .center)
+		VStack(alignment: .leading, spacing: 0) {
+			HStack(alignment: .top, spacing: 8) {
+				Image(systemName: "circle.fill")
+					.font(.system(size: 4))
+					.foregroundStyle(.secondary)
+					.padding(.top, 4)
+					.frame(width: 10, alignment: .center)
 
-			Text(value)
-				.font(.system(size: 12))
-				.frame(maxWidth: .infinity, alignment: .leading)
-				.textSelection(.enabled)
-				.fixedSize(horizontal: false, vertical: true)
+				Text(displayValue)
+					.font(.system(size: 12))
+					.frame(maxWidth: .infinity, alignment: .leading)
+					.textSelection(.enabled)
+					.fixedSize(horizontal: false, vertical: true)
 
-			copyButton(value: value, copied: $copied)
+				copyButton(value: value, copied: $copied)
+			}
+			.padding(.leading, 30)
+			.padding(.trailing, 20)
+			.padding(.top, 3)
+			.padding(.bottom, isTruncatable ? 1 : 3)
+
+			if isTruncatable {
+				Button {
+					withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+				} label: {
+					Text(expanded ? "Show less" : "Show more")
+						.font(.system(size: 11))
+						.foregroundStyle(.blue)
+				}
+				.buttonStyle(.plain)
+				.padding(.leading, 50)
+				.padding(.bottom, 3)
+				.accessibilityLabel(expanded ? "Collapse prompt" : "Expand prompt")
+			}
 		}
-		.padding(.leading, 30)
-		.padding(.trailing, 20)
-		.padding(.vertical, 3)
 	}
 }
 
