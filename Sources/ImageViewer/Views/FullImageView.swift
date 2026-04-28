@@ -158,6 +158,18 @@ struct FullImageView: View {
 					.help("Full metadata (m)")
 
 					Button {
+						state.toggleSlideshow()
+					} label: {
+						Image(systemName: state.slideshowActive ? "pause.fill" : "play.fill")
+							.font(.system(size: 18, weight: .medium))
+							.foregroundStyle(.white)
+							.frame(width: 40, height: 40)
+							.background(.ultraThinMaterial.opacity(0.7), in: Circle())
+					}
+					.buttonStyle(.plain)
+					.help(state.slideshowActive ? "Stop slideshow (⌘P)" : "Start slideshow (⌘P)")
+
+					Button {
 						let url = currentURL
 						state.deleteImage(at: url)
 						if state.imageURLs.isEmpty { state.viewMode = .gallery }
