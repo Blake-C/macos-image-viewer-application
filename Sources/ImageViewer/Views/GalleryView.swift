@@ -7,6 +7,7 @@ struct GalleryView: View {
     @State private var isRefreshing      = false
     @State private var showFilterPopover = false
     @State private var showSettings      = false
+    @State private var isDragTargeted    = false
     @FocusState private var searchFocused: Bool
 
     private var gridColumns: [GridItem] {
@@ -65,6 +66,40 @@ struct GalleryView: View {
                     }
                     .onChange(of: state.thumbnailSize) { _, _ in
                         state.galleryColumnCount = columnCount(for: geo.size.width)
+                    }
+                    .onDrop(of: [.folder, .fileURL], isTargeted: $isDragTargeted) { providers in
+                        guard let provider = providers.first else { return false }
+                        _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                            guard let url else { return }
+                            var isDir: ObjCBool = false
+                            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),
+                                  isDir.boolValue else { return }
+                            Task { @MainActor in
+                                let images = await FolderScanner.scan(directory: url)
+                                await state.loadImages(images, from: url)
+                                state.viewMode = .gallery
+                            }
+                        }
+                        return true
+                    }
+                    .overlay {
+                        if isDragTargeted {
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.accentColor, lineWidth: 3)
+                                .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                                .overlay {
+                                    VStack(spacing: 8) {
+                                        Image(systemName: "folder.badge.plus")
+                                            .font(.system(size: 36))
+                                            .foregroundStyle(Color.accentColor)
+                                        Text("Drop folder to open")
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundStyle(Color.accentColor)
+                                    }
+                                }
+                                .padding(8)
+                                .allowsHitTesting(false)
+                        }
                     }
                 }
             }

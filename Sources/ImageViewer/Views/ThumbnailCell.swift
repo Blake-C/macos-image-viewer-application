@@ -120,6 +120,9 @@ struct ThumbnailCell: View {
                 Label("Move to Trash", systemImage: "trash")
             }
         }
+        .onDrag {
+            NSItemProvider(object: url as NSURL)
+        }
         .id(url)
         .task(id: url) {
             let size: CGFloat = masonry ? 800 : cellWidth * 2
