@@ -787,7 +787,9 @@ final class AppState: ObservableObject {
     private func startMonitors() {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
-            return self.handleKeyEvent(event) ? nil : event
+            // AppKit guarantees event monitor callbacks fire on the main thread;
+            // assumeIsolated makes the compiler aware of that invariant.
+            return MainActor.assumeIsolated { self.handleKeyEvent(event) } ? nil : event
         }
 
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
@@ -1066,21 +1068,28 @@ final class AppState: ObservableObject {
         let known = Set(imageDimensions.keys)
         let todo = urls.filter { !known.contains($0) }
         guard !todo.isEmpty else { return }
-        Task.detached(priority: .utility) { [weak self] in
-            var batch: [URL: CGSize] = [:]
-            for url in todo {
-                if let size = Self.readImageDimensions(url) {
-                    batch[url] = size
-                }
-                if batch.count >= 100 {
-                    let b = batch; batch = [:]
-                    await MainActor.run { self?.imageDimensions.merge(b) { _, new in new } }
-                    await Task.yield()
-                }
-            }
-            if !batch.isEmpty {
-                let b = batch
-                await MainActor.run { self?.imageDimensions.merge(b) { _, new in new } }
+        // Outer Task is @MainActor so 'self' is only ever accessed from the main actor.
+        // Each batch is read by an inner detached task that captures only the URL slice
+        // (a value type) — 'self' never appears in a concurrent closure, fixing the
+        // captured-var warning that arose from the previous Task.detached { [weak self] } pattern.
+        Task { @MainActor [weak self] in
+            let batchSize = 100
+            var start = 0
+            while start < todo.count {
+                guard self != nil else { return }
+                let end = min(start + batchSize, todo.count)
+                let slice = Array(todo[start..<end])
+                start = end
+                let dims = await Task.detached(priority: .utility) {
+                    var result: [URL: CGSize] = [:]
+                    for url in slice {
+                        if let size = AppState.readImageDimensions(url) {
+                            result[url] = size
+                        }
+                    }
+                    return result
+                }.value
+                self?.imageDimensions.merge(dims) { _, new in new }
             }
         }
     }
