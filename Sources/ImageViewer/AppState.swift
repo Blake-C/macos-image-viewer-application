@@ -944,6 +944,7 @@ final class AppState: ObservableObject {
         slideshowTask = nil
         slideshowActive = false
         isSlideshowTransition = false
+        keyboardNavigated = true   // ensure GalleryView scrolls to the current image
         // Cancel any in-flight Ken Burns animation — snap zoom immediately
         var snap = Transaction()
         snap.disablesAnimations = true
