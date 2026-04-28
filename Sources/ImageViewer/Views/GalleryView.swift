@@ -379,6 +379,10 @@ struct GalleryView: View {
                 LazyVStack(spacing: spacing) {
                     ForEach(Array(distributed[col].enumerated()), id: \.element) { localIdx, url in
                         let globalIdx = col + localIdx * numCols
+                        let dims = state.imageDimensions[url]
+                        let cellHeight: CGFloat? = dims.flatMap { d in
+                            d.width > 0 ? colWidth * d.height / d.width : nil
+                        }
                         ThumbnailCell(
                             url: url,
                             isSelected: state.selectedIndex == globalIdx,
@@ -387,6 +391,7 @@ struct GalleryView: View {
                             squareThumbnails: false,
                             masonry: true,
                             cellWidth: colWidth,
+                            masonryHeight: cellHeight,
                             onTap: { state.handleThumbnailTap(url: url, atIndex: globalIdx) },
                             onDelete: { state.deleteImage(at: url) },
                             onToggleFavorite: { state.toggleFavorite(url) }

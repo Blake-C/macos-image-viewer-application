@@ -9,6 +9,7 @@ struct ThumbnailCell: View {
     let squareThumbnails: Bool
     var masonry: Bool = false
     var cellWidth: CGFloat = 160  // controls both grid cell size and masonry column width
+    var masonryHeight: CGFloat? = nil  // pre-computed from image dimensions; nil = dynamic
     let onTap: () -> Void
     let onDelete: () -> Void
     let onToggleFavorite: () -> Void
@@ -28,10 +29,10 @@ struct ThumbnailCell: View {
                 } else {
                     ProgressView()
                         .scaleEffect(0.7)
-                        .frame(height: masonry ? 180 : nil)
+                        .frame(height: masonry ? (masonryHeight ?? 180) : nil)
                 }
             }
-            .frame(width: cellWidth, height: masonry ? nil : cellWidth)
+            .frame(width: cellWidth, height: masonry ? masonryHeight : cellWidth)
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
@@ -57,7 +58,7 @@ struct ThumbnailCell: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
         }
-        .frame(width: cellWidth, height: masonry ? nil : cellWidth)
+        .frame(width: cellWidth, height: masonry ? masonryHeight : cellWidth)
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
         .contextMenu {

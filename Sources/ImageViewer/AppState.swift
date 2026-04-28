@@ -83,6 +83,7 @@ final class AppState: ObservableObject {
     @Published var keyboardNavigated: Bool = false
     @Published var galleryColumnCount: Int = 5
     @Published var masonryColumnCount: Int = 2
+    @Published var imageDimensions: [URL: CGSize] = [:]
 
     // MARK: - Sort
 
@@ -351,6 +352,10 @@ final class AppState: ObservableObject {
         } else {
             unsortedURLs = urls
         }
+        if folder != nil {
+            imageDimensions = [:]
+        }
+        prefetchDimensions(for: unsortedURLs)
         ImageLoader.clearThumbnailCache()
         await applyCurrentSort(resetSelection: true)
     }
@@ -1053,6 +1058,41 @@ final class AppState: ObservableObject {
         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
             viewMode = .gallery
         }
+    }
+
+    // MARK: - Image dimension prefetch (masonry layout stability)
+
+    func prefetchDimensions(for urls: [URL]) {
+        let known = Set(imageDimensions.keys)
+        let todo = urls.filter { !known.contains($0) }
+        guard !todo.isEmpty else { return }
+        Task.detached(priority: .utility) { [weak self] in
+            var batch: [URL: CGSize] = [:]
+            for url in todo {
+                if let size = Self.readImageDimensions(url) {
+                    batch[url] = size
+                }
+                if batch.count >= 100 {
+                    let b = batch; batch = [:]
+                    await MainActor.run { self?.imageDimensions.merge(b) { _, new in new } }
+                    await Task.yield()
+                }
+            }
+            if !batch.isEmpty {
+                let b = batch
+                await MainActor.run { self?.imageDimensions.merge(b) { _, new in new } }
+            }
+        }
+    }
+
+    private static func readImageDimensions(_ url: URL) -> CGSize? {
+        let opts = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let src = CGImageSourceCreateWithURL(url as CFURL, opts),
+              let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
+              let w = props[kCGImagePropertyPixelWidth] as? Int,
+              let h = props[kCGImagePropertyPixelHeight] as? Int,
+              w > 0, h > 0 else { return nil }
+        return CGSize(width: w, height: h)
     }
 
     // MARK: - Sort (off main thread)
