@@ -112,6 +112,7 @@ final class AppState: ObservableObject {
     @Published var slideshowActive: Bool = false
     @Published var slideshowInterval: Double
     @Published var kenBurnsEnabled: Bool
+    @Published var slideshowShuffle: Bool
     /// Set to true by the slideshow timer so FullImageView knows to crossfade.
     /// Consumed (reset) at the start of each FullImageView task.
     @Published var isSlideshowTransition: Bool = false
@@ -153,6 +154,7 @@ final class AppState: ObservableObject {
         static let favorites         = "favoriteImagePaths"
         static let slideshowInterval = "slideshowInterval"
         static let kenBurnsEnabled   = "kenBurnsEnabled"
+        static let slideshowShuffle  = "slideshowShuffle"
         static let folderSettings    = "folderSettings"
     }
 
@@ -167,6 +169,7 @@ final class AppState: ObservableObject {
         slideshowInterval = stored > 0 ? stored : 3.0
         kenBurnsEnabled = ud.object(forKey: UDKey.kenBurnsEnabled) != nil
             ? ud.bool(forKey: UDKey.kenBurnsEnabled) : true   // on by default
+        slideshowShuffle = ud.bool(forKey: UDKey.slideshowShuffle)
         startMonitors()
     }
 
@@ -499,11 +502,23 @@ final class AppState: ObservableObject {
                 await MainActor.run {
                     guard self.slideshowActive else { return }
                     self.isSlideshowTransition = true
-                    let next = self.selectedIndex + 1
-                    self.selectedIndex = next >= self.imageURLs.count ? 0 : next
+                    if self.slideshowShuffle, self.imageURLs.count > 1 {
+                        var next: Int
+                        repeat { next = Int.random(in: 0..<self.imageURLs.count) }
+                        while next == self.selectedIndex
+                        self.selectedIndex = next
+                    } else {
+                        let next = self.selectedIndex + 1
+                        self.selectedIndex = next >= self.imageURLs.count ? 0 : next
+                    }
                 }
             }
         }
+    }
+
+    func toggleShuffle() {
+        slideshowShuffle.toggle()
+        UserDefaults.standard.set(slideshowShuffle, forKey: UDKey.slideshowShuffle)
     }
 
     func setSlideshowInterval(_ interval: Double) {

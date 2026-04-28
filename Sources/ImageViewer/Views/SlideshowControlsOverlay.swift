@@ -59,6 +59,27 @@ struct SlideshowControlsOverlay: View {
 
             Spacer()
 
+            // Shuffle toggle
+            Button {
+                state.toggleShuffle()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "shuffle")
+                        .font(.system(size: 12, weight: .medium))
+                    Text("Shuffle")
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .foregroundStyle(state.slideshowShuffle ? Color.accentColor : .white.opacity(0.5))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(state.slideshowShuffle ? Color.accentColor.opacity(0.2) : Color.clear)
+                )
+            }
+            .buttonStyle(.plain)
+            .help(state.slideshowShuffle ? "Disable shuffle" : "Enable shuffle")
+
             // Ken Burns toggle
             Button {
                 state.toggleKenBurns()
