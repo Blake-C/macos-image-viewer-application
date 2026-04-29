@@ -426,6 +426,11 @@ final class AppState: ObservableObject {
 
         imageURLs = filtered
 
+        // Exit full-image view when nothing is left to prevent an out-of-bounds crash.
+        if filtered.isEmpty, viewMode == .fullImage {
+            viewMode = .gallery
+        }
+
         if resetSelection {
             selectedIndex = 0
         } else if let url = preserveURL, let idx = filtered.firstIndex(of: url) {
@@ -539,9 +544,11 @@ final class AppState: ObservableObject {
         guard let folder = folder ?? currentFolder else { return }
         let urls = await FolderScanner.scan(directory: folder, recursive: scanRecursively)
         unsortedURLs = urls
-        folderVersion += 1
-        ImageLoader.clearAllCaches()
+        // Keep thumbnail cache for existing files; only clear the full-size image cache.
+        ImageLoader.clearFullImageCache()
         await applyCurrentSort(resetSelection: false)
+        // Increment after imageURLs is updated — grid rebuilds with correct data in one pass.
+        folderVersion += 1
     }
 
     // MARK: - Favorites

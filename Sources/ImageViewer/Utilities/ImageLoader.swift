@@ -157,6 +157,12 @@ enum ImageLoader {
 		ThumbnailCache.shared.removeAll()
 	}
 
+	/// Clears only the full-size image cache (call on same-folder refresh to avoid stale decoded images
+	/// while keeping thumbnail cache intact for existing files).
+	static func clearFullImageCache() {
+		FullImageCache.shared.removeAll()
+	}
+
 	/// Clears all caches (call on folder change to avoid serving stale decoded images).
 	static func clearAllCaches() {
 		ThumbnailCache.shared.removeAll()

@@ -20,7 +20,12 @@ struct FullImageView: View {
 	@State private var kbPan: CGSize = .zero
 	@State private var kenBurnsActive: Bool = false
 
-	var currentURL: URL { state.imageURLs[state.selectedIndex] }
+	var currentURL: URL {
+		guard state.imageURLs.indices.contains(state.selectedIndex) else {
+			return URL(fileURLWithPath: "/dev/null")
+		}
+		return state.imageURLs[state.selectedIndex]
+	}
 
 	// Effective zoom/pan accounting for whether Ken Burns owns the transform
 	private var effectiveZoom: CGFloat { kenBurnsActive ? kbZoom : state.zoomScale }
