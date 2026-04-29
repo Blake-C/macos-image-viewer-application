@@ -11,7 +11,7 @@ struct GalleryView: View {
     @State private var showSettings           = false
     @State private var isDragTargeted         = false
     @State private var pendingCenterScroll    = false
-    @State private var masonryPreScrollTask: Task<Void, Never>? = nil
+    @State private var preScrollTask: Task<Void, Never>? = nil
     @FocusState private var searchFocused: Bool
 
     private var gridColumns: [GridItem] {
@@ -28,7 +28,8 @@ struct GalleryView: View {
                             masonryContent(availableWidth: geo.size.width)
                         } else {
                             LazyVGrid(columns: gridColumns, spacing: 8) {
-                                ForEach(Array(state.imageURLs.enumerated()), id: \.element) { i, url in
+                                ForEach(state.imageURLs.indices, id: \.self) { i in
+                                    let url = state.imageURLs[i]
                                     ThumbnailCell(
                                         url: url,
                                         isSelected: state.selectedIndex == i,
@@ -40,6 +41,7 @@ struct GalleryView: View {
                                         onDelete: { state.deleteImage(at: url) },
                                         onToggleFavorite: { state.toggleFavorite(url) }
                                     )
+                                    .id(url)
                                 }
                             }
                             .padding(12)
@@ -68,16 +70,24 @@ struct GalleryView: View {
                                 proxy.scrollTo(state.imageURLs[newIdx])
                             }
                             // Grid: handled by GalleryScrollController (O(1) math)
-                        } else if state.viewMode == .fullImage, state.masonryLayout {
-                            // Silently pre-position the masonry grid while still in fullscreen.
-                            // Debounced so rapid keypresses don't cause churn — fires 300 ms
-                            // after the user stops navigating, well before they exit fullscreen.
-                            let url = state.imageURLs[newIdx]
-                            masonryPreScrollTask?.cancel()
-                            masonryPreScrollTask = Task { @MainActor in
-                                try? await Task.sleep(for: .milliseconds(300))
-                                guard !Task.isCancelled else { return }
-                                proxy.scrollTo(url, anchor: .center)
+                        } else if state.viewMode == .fullImage {
+                            // Silently pre-position the grid while still in fullscreen so it's
+                            // already at the right place when the exit animation reveals it.
+                            // Debounced so rapid keypresses don't cause churn.
+                            preScrollTask?.cancel()
+                            if state.masonryLayout {
+                                let url = state.imageURLs[newIdx]
+                                preScrollTask = Task { @MainActor in
+                                    try? await Task.sleep(for: .milliseconds(300))
+                                    guard !Task.isCancelled else { return }
+                                    proxy.scrollTo(url, anchor: .center)
+                                }
+                            } else {
+                                preScrollTask = Task { @MainActor in
+                                    try? await Task.sleep(for: .milliseconds(300))
+                                    guard !Task.isCancelled else { return }
+                                    pendingCenterScroll = true
+                                }
                             }
                         }
                     }
@@ -90,10 +100,9 @@ struct GalleryView: View {
                             // so the user never sees the jump.
                             proxy.scrollTo(state.imageURLs[state.selectedIndex], anchor: .center)
                         } else {
-                            // Grid: fire math-based center scroll after gallery transition (~0.4s spring)
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                                pendingCenterScroll = true
-                            }
+                            // Grid: fire immediately while FullImageView still covers the gallery.
+                            // GalleryScrollController dispatches to main async internally.
+                            pendingCenterScroll = true
                         }
                     }
                     .onAppear {
