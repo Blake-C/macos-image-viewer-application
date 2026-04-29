@@ -5,12 +5,13 @@ import UniformTypeIdentifiers
 struct GalleryView: View {
     @EnvironmentObject var state: AppState
 
-    @State private var isRefreshing        = false
-    @State private var showFilterPopover   = false
-    @State private var showViewPopover     = false
-    @State private var showSettings        = false
-    @State private var isDragTargeted      = false
-    @State private var pendingCenterScroll = false
+    @State private var isRefreshing           = false
+    @State private var showFilterPopover      = false
+    @State private var showViewPopover        = false
+    @State private var showSettings           = false
+    @State private var isDragTargeted         = false
+    @State private var pendingCenterScroll    = false
+    @State private var visibleMasonryURLs: Set<URL> = []
     @FocusState private var searchFocused: Bool
 
     private var gridColumns: [GridItem] {
@@ -74,6 +75,7 @@ struct GalleryView: View {
                         if state.masonryLayout {
                             let url = state.imageURLs[state.selectedIndex]
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                                guard !visibleMasonryURLs.contains(url) else { return }
                                 withAnimation { proxy.scrollTo(url, anchor: .center) }
                             }
                         } else {
@@ -351,6 +353,8 @@ struct GalleryView: View {
                             onDelete: { state.deleteImage(at: url) },
                             onToggleFavorite: { state.toggleFavorite(url) }
                         )
+                        .onAppear { visibleMasonryURLs.insert(url) }
+                        .onDisappear { visibleMasonryURLs.remove(url) }
                     }
                 }
             }
