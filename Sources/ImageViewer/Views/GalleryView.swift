@@ -12,6 +12,7 @@ struct GalleryView: View {
     @State private var isDragTargeted         = false
     @State private var pendingCenterScroll    = false
     @State private var visibleMasonryURLs: Set<URL> = []
+    @State private var masonryPreScrollTask: Task<Void, Never>? = nil
     @FocusState private var searchFocused: Bool
 
     private var gridColumns: [GridItem] {
@@ -62,13 +63,25 @@ struct GalleryView: View {
                     .background(Color.black)
                     .onChange(of: state.selectedIndex) { _, newIdx in
                         guard state.keyboardNavigated,
-                              state.viewMode == .gallery,
                               state.imageURLs.indices.contains(newIdx) else { return }
-                        if state.masonryLayout {
-                            // Masonry: variable row heights, keep proxy-based scroll
-                            proxy.scrollTo(state.imageURLs[newIdx])
+                        if state.viewMode == .gallery {
+                            if state.masonryLayout {
+                                // Masonry: variable row heights, keep proxy-based scroll
+                                proxy.scrollTo(state.imageURLs[newIdx])
+                            }
+                            // Grid: handled by GalleryScrollController (O(1) math)
+                        } else if state.viewMode == .fullImage, state.masonryLayout {
+                            // Silently pre-position the masonry grid while still in fullscreen.
+                            // Debounced so rapid keypresses don't cause churn — fires 300 ms
+                            // after the user stops navigating, well before they exit fullscreen.
+                            let url = state.imageURLs[newIdx]
+                            masonryPreScrollTask?.cancel()
+                            masonryPreScrollTask = Task { @MainActor in
+                                try? await Task.sleep(for: .milliseconds(300))
+                                guard !Task.isCancelled else { return }
+                                proxy.scrollTo(url, anchor: .center)
+                            }
                         }
-                        // Grid: handled by GalleryScrollController (O(1) math)
                     }
                     .onChange(of: state.needsScrollToSelected) { _, needs in
                         guard needs, state.imageURLs.indices.contains(state.selectedIndex) else { return }
