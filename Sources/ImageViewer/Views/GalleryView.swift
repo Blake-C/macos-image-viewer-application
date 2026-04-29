@@ -65,15 +65,7 @@ struct GalleryView: View {
                               state.imageURLs.indices.contains(newIdx) else { return }
                         if state.viewMode == .gallery {
                             if state.masonryLayout {
-                                // Debounce so rapid key-repeat doesn't fire an expensive
-                                // proxy.scrollTo on every event near the bottom of large galleries.
-                                let url = state.imageURLs[newIdx]
-                                masonryPreScrollTask?.cancel()
-                                masonryPreScrollTask = Task { @MainActor in
-                                    try? await Task.sleep(for: .milliseconds(80))
-                                    guard !Task.isCancelled else { return }
-                                    proxy.scrollTo(url)
-                                }
+                                proxy.scrollTo(state.imageURLs[newIdx])
                             }
                             // Grid: handled by GalleryScrollController (O(1) math)
                         } else if state.viewMode == .fullImage, state.masonryLayout {
