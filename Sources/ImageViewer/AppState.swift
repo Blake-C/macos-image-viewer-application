@@ -356,7 +356,7 @@ final class AppState: ObservableObject {
             imageDimensions = [:]
         }
         prefetchDimensions(for: unsortedURLs)
-        ImageLoader.clearThumbnailCache()
+        ImageLoader.clearAllCaches()
         await applyCurrentSort(resetSelection: true)
     }
 
@@ -535,7 +535,7 @@ final class AppState: ObservableObject {
         let urls = await FolderScanner.scan(directory: folder, recursive: scanRecursively)
         unsortedURLs = urls
         folderVersion += 1
-        ImageLoader.clearThumbnailCache()
+        ImageLoader.clearAllCaches()
         await applyCurrentSort(resetSelection: false)
     }
 
@@ -1026,6 +1026,9 @@ final class AppState: ObservableObject {
         let newIdx = max(0, min(imageURLs.count - 1, selectedIndex + delta))
         keyboardNavigated = keyboard
         selectedIndex = newIdx
+        let urls = imageURLs
+        if urls.indices.contains(newIdx - 1) { ImageLoader.prefetch(for: urls[newIdx - 1]) }
+        if urls.indices.contains(newIdx + 1) { ImageLoader.prefetch(for: urls[newIdx + 1]) }
     }
 
     func enterFullImage() {

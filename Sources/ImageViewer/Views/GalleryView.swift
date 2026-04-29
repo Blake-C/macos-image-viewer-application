@@ -62,6 +62,7 @@ struct GalleryView: View {
                     .background(Color.black)
                     .onChange(of: state.selectedIndex) { _, newIdx in
                         guard state.keyboardNavigated,
+                              state.viewMode == .gallery,
                               state.imageURLs.indices.contains(newIdx) else { return }
                         if state.masonryLayout {
                             // Masonry: variable row heights, keep proxy-based scroll
