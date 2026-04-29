@@ -11,7 +11,6 @@ struct GalleryView: View {
     @State private var showSettings           = false
     @State private var isDragTargeted         = false
     @State private var pendingCenterScroll    = false
-    @State private var visibleMasonryURLs: Set<URL> = []
     @State private var masonryPreScrollTask: Task<Void, Never>? = nil
     @FocusState private var searchFocused: Bool
 
@@ -87,11 +86,10 @@ struct GalleryView: View {
                         guard needs, state.imageURLs.indices.contains(state.selectedIndex) else { return }
                         state.needsScrollToSelected = false
                         if state.masonryLayout {
-                            let url = state.imageURLs[state.selectedIndex]
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                                guard !visibleMasonryURLs.contains(url) else { return }
-                                proxy.scrollTo(url, anchor: .center)
-                            }
+                            // Fire immediately while FullImageView is still covering the gallery.
+                            // The scroll completes before the exit animation reveals the grid,
+                            // so the user never sees the jump.
+                            proxy.scrollTo(state.imageURLs[state.selectedIndex], anchor: .center)
                         } else {
                             // Grid: fire math-based center scroll after gallery transition (~0.4s spring)
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
@@ -367,8 +365,6 @@ struct GalleryView: View {
                             onDelete: { state.deleteImage(at: url) },
                             onToggleFavorite: { state.toggleFavorite(url) }
                         )
-                        .onAppear { visibleMasonryURLs.insert(url) }
-                        .onDisappear { visibleMasonryURLs.remove(url) }
                     }
                 }
             }
