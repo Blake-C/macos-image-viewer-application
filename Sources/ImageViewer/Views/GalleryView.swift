@@ -76,7 +76,7 @@ struct GalleryView: View {
                             let url = state.imageURLs[state.selectedIndex]
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
                                 guard !visibleMasonryURLs.contains(url) else { return }
-                                withAnimation { proxy.scrollTo(url, anchor: .center) }
+                                proxy.scrollTo(url, anchor: .center)
                             }
                         } else {
                             // Grid: fire math-based center scroll after gallery transition (~0.4s spring)
