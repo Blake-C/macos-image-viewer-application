@@ -62,7 +62,7 @@ struct RootView: View {
 
         // Bring the app forward before prompting — biometric dialogs require the app to be frontmost.
         NSApp.activate(ignoringOtherApps: true)
-        NSApp.windows.first?.makeKeyAndOrderFront(nil)
+        (NSApp.keyWindow ?? NSApp.windows.first)?.makeKeyAndOrderFront(nil)
 
         if FolderLockManager.shared.isLocked(folder) {
             let authorized = await FolderLockManager.shared.authenticate(
@@ -93,7 +93,7 @@ struct RootView: View {
         guard let result = await FolderScanner.openPanelAndScan() else {
             // User cancelled — stay on whatever is currently showing
             NSApp.activate(ignoringOtherApps: true)
-            NSApp.windows.first?.makeKeyAndOrderFront(nil)
+            (NSApp.keyWindow ?? NSApp.windows.first)?.makeKeyAndOrderFront(nil)
             return
         }
 
@@ -109,13 +109,13 @@ struct RootView: View {
                 state.authFailed = true
                 state.pendingAuthFolder = result.folder
                 NSApp.activate(ignoringOtherApps: true)
-                NSApp.windows.first?.makeKeyAndOrderFront(nil)
+                (NSApp.keyWindow ?? NSApp.windows.first)?.makeKeyAndOrderFront(nil)
                 return
             }
         }
 
         NSApp.activate(ignoringOtherApps: true)
-        NSApp.windows.first?.makeKeyAndOrderFront(nil)
+        (NSApp.keyWindow ?? NSApp.windows.first)?.makeKeyAndOrderFront(nil)
 
         state.zoomScale = 1.0
         state.panOffset = .zero

@@ -297,7 +297,7 @@ final class AppState: ObservableObject {
 
         if FolderLockManager.shared.isLocked(url) {
             NSApp.activate(ignoringOtherApps: true)
-            NSApp.windows.first?.makeKeyAndOrderFront(nil)
+            (NSApp.keyWindow ?? NSApp.windows.first)?.makeKeyAndOrderFront(nil)
             let authorized = await FolderLockManager.shared.authenticate(
                 for: url,
                 reason: "Authenticate to open \"\(url.lastPathComponent)\""
