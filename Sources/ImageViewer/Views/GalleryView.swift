@@ -65,8 +65,15 @@ struct GalleryView: View {
                               state.imageURLs.indices.contains(newIdx) else { return }
                         if state.viewMode == .gallery {
                             if state.masonryLayout {
-                                // Masonry: variable row heights, keep proxy-based scroll
-                                proxy.scrollTo(state.imageURLs[newIdx])
+                                // Debounce so rapid key-repeat doesn't fire an expensive
+                                // proxy.scrollTo on every event near the bottom of large galleries.
+                                let url = state.imageURLs[newIdx]
+                                masonryPreScrollTask?.cancel()
+                                masonryPreScrollTask = Task { @MainActor in
+                                    try? await Task.sleep(for: .milliseconds(80))
+                                    guard !Task.isCancelled else { return }
+                                    proxy.scrollTo(url)
+                                }
                             }
                             // Grid: handled by GalleryScrollController (O(1) math)
                         } else if state.viewMode == .fullImage, state.masonryLayout {
@@ -341,13 +348,15 @@ struct GalleryView: View {
         let spacing: CGFloat = 8
         let numCols = masonryColumnCount(for: availableWidth)
         let colWidth = (availableWidth - 24 - spacing * CGFloat(numCols - 1)) / CGFloat(numCols)
-        let distributed = distributeURLs(state.imageURLs, into: numCols)
+        let totalCount = state.imageURLs.count
 
         HStack(alignment: .top, spacing: spacing) {
             ForEach(0..<numCols, id: \.self) { col in
+                let colCount = (totalCount - col + numCols - 1) / numCols
                 LazyVStack(spacing: spacing) {
-                    ForEach(Array(distributed[col].enumerated()), id: \.element) { localIdx, url in
+                    ForEach(0..<colCount, id: \.self) { localIdx in
                         let globalIdx = col + localIdx * numCols
+                        let url = state.imageURLs[globalIdx]
                         let dims = state.imageDimensions[url]
                         let cellHeight: CGFloat? = dims.flatMap { d in
                             d.width > 0 ? colWidth * d.height / d.width : nil
@@ -365,6 +374,7 @@ struct GalleryView: View {
                             onDelete: { state.deleteImage(at: url) },
                             onToggleFavorite: { state.toggleFavorite(url) }
                         )
+                        .id(url)
                     }
                 }
             }
@@ -376,14 +386,6 @@ struct GalleryView: View {
 
     private func masonryColumnCount(for width: CGFloat) -> Int {
         max(2, Int(width / 360))
-    }
-
-    private func distributeURLs(_ urls: [URL], into columns: Int) -> [[URL]] {
-        var result = Array(repeating: [URL](), count: columns)
-        for (i, url) in urls.enumerated() {
-            result[i % columns].append(url)
-        }
-        return result
     }
 
     // MARK: - Helpers
