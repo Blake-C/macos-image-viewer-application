@@ -173,6 +173,11 @@ final class AppState: ObservableObject {
     private var keyMonitor: Any?
     private var scrollMonitor: Any?
     private var magnifyMonitor: Any?
+
+    /// The window this AppState belongs to. Set by WindowContent once the NSWindow
+    /// is available. Used to scope local event monitors to the correct window so
+    /// multiple open windows don't cross-contaminate each other's state.
+    weak var associatedWindow: NSWindow?
     private var slideshowTask: Task<Void, Never>?
     private var lastSizedURLs: [URL] = []
     private var folderWatchSource: DispatchSourceFileSystemObject?
@@ -787,6 +792,7 @@ final class AppState: ObservableObject {
     private func startMonitors() {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
+            guard self.associatedWindow == nil || event.window == self.associatedWindow else { return event }
             // AppKit guarantees event monitor callbacks fire on the main thread;
             // assumeIsolated makes the compiler aware of that invariant.
             return MainActor.assumeIsolated { self.handleKeyEvent(event) } ? nil : event
@@ -794,6 +800,7 @@ final class AppState: ObservableObject {
 
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             guard let self, self.viewMode == .fullImage else { return event }
+            guard self.associatedWindow == nil || event.window == self.associatedWindow else { return event }
 
             // The local monitor fires for every window in the app, including the
             // metadata sheet. While the sheet is open, pass all events through so
@@ -819,6 +826,7 @@ final class AppState: ObservableObject {
 
         magnifyMonitor = NSEvent.addLocalMonitorForEvents(matching: .magnify) { [weak self] event in
             guard let self, self.viewMode == .fullImage, !self.showMetadataPanel else { return event }
+            guard self.associatedWindow == nil || event.window == self.associatedWindow else { return event }
             let factor = 1.0 + event.magnification
             guard let contentView = event.window?.contentView else { return nil }
             let bounds = contentView.bounds

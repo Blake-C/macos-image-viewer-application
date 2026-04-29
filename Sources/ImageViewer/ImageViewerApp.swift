@@ -28,6 +28,7 @@ struct WindowContent: View {
 			.focusedSceneObject(state)  // exposes state to @FocusedObject in Commands; scene-level variant resolves on launch without requiring prior user interaction
 			.frame(minWidth: 900, minHeight: 600)
 			.background(WindowAccessor(window: $window).ignoresSafeArea())
+			.onChange(of: window) { _, w in state.associatedWindow = w }
 			.onChange(of: state.currentFolder)   { _, _ in updateTitle() }
 			.onChange(of: state.imageURLs.count) { _, _ in updateTitle() }
 			.onChange(of: state.totalFileSize)   { _, _ in updateTitle() }
