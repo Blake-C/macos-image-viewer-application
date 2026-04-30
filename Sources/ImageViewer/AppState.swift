@@ -390,7 +390,7 @@ final class AppState: ObservableObject {
     }
 
     private func scheduleFilter() {
-        Task { @MainActor in applyFiltersNow() }
+        MainActor.assumeIsolated { applyFiltersNow() }
     }
 
     @MainActor
@@ -540,6 +540,7 @@ final class AppState: ObservableObject {
 
     // MARK: - Refresh
 
+    @MainActor
     func refreshCurrentFolder(folder: URL? = nil) async {
         guard let folder = folder ?? currentFolder else { return }
         let urls = await FolderScanner.scan(directory: folder, recursive: scanRecursively)
