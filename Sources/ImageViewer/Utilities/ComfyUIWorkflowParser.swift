@@ -31,12 +31,16 @@ struct ComfyUIWorkflow {
 	let ollamaEnhancedPrompt: String?
 	let randomPrompts: [String]
 	let appendText: String?
+	let promptFile: String?       // RandomPromptFromDirectory selected filename
 	let positivePrompt: String?
 	let negativePrompt: String?
 	let ksamplers: [KSamplerInfo]
+	let aestheticScores: String?  // AestheticScoreBatch score output
 	let generationSize: (Int, Int)?  // EmptyLatentImage width × height
 	let sourceFilename: String?
 	let outputDirectory: String?
+	let banditInfo: String?       // BanditComboSelector selection summary
+	let runId: String?            // run UUID from RunStart
 	let workflowNotes: [String]   // MarkdownNote content
 }
 
@@ -85,12 +89,16 @@ enum ComfyUIWorkflowParser {
 			ollamaEnhancedPrompt: extractOllamaOutput(prompt: prompt, runtime: runtime),
 			randomPrompts:   extractRandomPrompts(prompt: prompt),
 			appendText:      extractAppendText(prompt: prompt),
+			promptFile:      extractPromptFile(prompt: prompt, runtime: runtime),
 			positivePrompt:  extractPositivePrompt(prompt: prompt, runtime: runtime),
 			negativePrompt:  extractNegativePrompt(prompt: prompt, runtime: runtime),
 			ksamplers:       extractKSamplers(prompt: prompt, runtime: runtime),
+			aestheticScores: extractAestheticScores(prompt: prompt, runtime: runtime),
 			generationSize:  extractGenerationSize(prompt: prompt),
 			sourceFilename:  extractSourceFilename(prompt: prompt, runtime: runtime),
 			outputDirectory: extractOutputDirectory(prompt: prompt),
+			banditInfo:      extractBanditInfo(prompt: prompt, runtime: runtime),
+			runId:           runtime["run_id"] as? String,
 			workflowNotes:   extractWorkflowNotes(from: workflowNodes)
 		)
 	}
@@ -107,15 +115,17 @@ enum ComfyUIWorkflowParser {
 			if loaderTypes.contains(classType), let raw = inputs["ckpt_name"] {
 				if let str = raw as? String { return str }
 				if let ref = raw as? [Any],
-				   let nodeId = ref.first as? String,
-				   let resolved = runtime[nodeId] as? String { return resolved }
+				   let nodeId = ref.first as? String {
+					if let resolved = runtime[nodeId] as? String { return resolved }
+				}
 			}
 			// FLUX: model and CLIP are split; UNETLoader carries the diffusion model name
 			if classType == "UNETLoader", let name = inputs["unet_name"] as? String {
 				return name
 			}
 		}
-		return nil
+		// Fallback: workflows using BanditComboSelector store the resolved name here
+		return runtime["checkpoint"] as? String
 	}
 
 	private static func extractVAE(prompt: [String: Any]) -> String? {
@@ -134,16 +144,22 @@ enum ComfyUIWorkflowParser {
 		runtime: [String: Any],
 		workflowNodes: [[String: Any]]
 	) -> [ComfyUIWorkflow.LoRA] {
-		let loraTypes: Set<String> = ["LoraLoader", "LoraLoaderModelOnly"]
+		let loraTypes: Set<String> = ["LoraLoader", "LoraLoaderModelOnly", "LoraLoaderByName"]
 		let fromPrompt = prompt.keys
 			.sorted { (Int($0) ?? 0) < (Int($1) ?? 0) }
 			.compactMap { key -> ComfyUIWorkflow.LoRA? in
 				guard let n = prompt[key] as? [String: Any],
 				      let classType = n["class_type"] as? String,
 				      loraTypes.contains(classType),
-				      let inputs = n["inputs"] as? [String: Any],
-				      let name = inputs["lora_name"] as? String
+				      let inputs = n["inputs"] as? [String: Any]
 				else { return nil }
+				if classType == "LoraLoaderByName" {
+					// lora_name may be a node ref; strength uses a single "strength" field
+					guard let name = resolveString(inputs["lora_name"], runtime: runtime) else { return nil }
+					let s = resolveDouble(inputs["strength"], runtime: runtime)
+					return ComfyUIWorkflow.LoRA(name: name, strengthModel: s, strengthClip: s)
+				}
+				guard let name = inputs["lora_name"] as? String else { return nil }
 				return ComfyUIWorkflow.LoRA(
 					name: name,
 					strengthModel: resolveDouble(inputs["strength_model"], runtime: runtime),
@@ -346,7 +362,9 @@ enum ComfyUIWorkflowParser {
 
 		switch node["class_type"] as? String {
 		case "CLIPTextEncode":
-			return inputs["text"] as? String
+			if let str = inputs["text"] as? String { return str }
+			// text can be a node ref (e.g. LoRATriggerWords → CLIPTextEncode)
+			return resolveString(inputs["text"], runtime: runtime)
 
 		case "CLIPTextEncodeFlux", "CLIPTextEncodeSD3":
 			// t5xxl carries the full detailed prompt; clip_l/clip_g are shorter alternatives
@@ -538,6 +556,66 @@ enum ComfyUIWorkflowParser {
 			      let dir = inputs["directory"] as? String
 			else { continue }
 			return dir
+		}
+		return nil
+	}
+
+	private static func extractPromptFile(prompt: [String: Any], runtime: [String: Any]) -> String? {
+		for (nodeId, node) in prompt {
+			guard let n = node as? [String: Any],
+			      n["class_type"] as? String == "RandomPromptFromDirectory"
+			else { continue }
+			return runtime[nodeId] as? String
+		}
+		return nil
+	}
+
+	/// Finds which named input slot of any CaptureRuntimeValues node receives output [nodeId, slot].
+	/// Returns the input name (e.g. "capture_11") so the runtime value can be looked up by that key.
+	private static func findCaptureKey(
+		for nodeId: String,
+		outputSlot: Int,
+		in prompt: [String: Any]
+	) -> String? {
+		for (_, node) in prompt {
+			guard let n = node as? [String: Any],
+			      n["class_type"] as? String == "CaptureRuntimeValues",
+			      let inputs = n["inputs"] as? [String: Any]
+			else { continue }
+			for (inputName, inputValue) in inputs {
+				guard let ref = inputValue as? [Any],
+				      ref.count >= 2,
+				      let refNodeId = ref.first as? String,
+				      let refSlot = ref[1] as? Int,
+				      refNodeId == nodeId,
+				      refSlot == outputSlot
+				else { continue }
+				return inputName
+			}
+		}
+		return nil
+	}
+
+	private static func extractAestheticScores(prompt: [String: Any], runtime: [String: Any]) -> String? {
+		for (nodeId, node) in prompt {
+			guard let n = node as? [String: Any],
+			      n["class_type"] as? String == "AestheticScoreBatch"
+			else { continue }
+			// output slot 1 is the scores STRING
+			guard let key = findCaptureKey(for: nodeId, outputSlot: 1, in: prompt) else { continue }
+			return runtime[key] as? String
+		}
+		return nil
+	}
+
+	private static func extractBanditInfo(prompt: [String: Any], runtime: [String: Any]) -> String? {
+		for (nodeId, node) in prompt {
+			guard let n = node as? [String: Any],
+			      n["class_type"] as? String == "BanditComboSelector"
+			else { continue }
+			// output slot 2 is selection_info
+			guard let key = findCaptureKey(for: nodeId, outputSlot: 2, in: prompt) else { continue }
+			return runtime[key] as? String
 		}
 		return nil
 	}

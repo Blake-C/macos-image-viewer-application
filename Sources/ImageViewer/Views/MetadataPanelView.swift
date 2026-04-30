@@ -235,6 +235,9 @@ struct MetadataPanelView: View {
 		if let v = wf.ollamaModel {
 			modelRows.append(MetadataRow(key: "Ollama Model", value: v, subItems: []))
 		}
+		if let v = wf.banditInfo {
+			modelRows.append(MetadataRow(key: "Selection", value: v, subItems: []))
+		}
 		if !wf.loras.isEmpty {
 			let loraLines = wf.loras.map { lora -> String in
 				let name = lora.name.hasSuffix(".safetensors")
@@ -272,6 +275,9 @@ struct MetadataPanelView: View {
 				genRows.append(MetadataRow(key: "\(p)Denoise", value: "\(r) (random)", subItems: []))
 			}
 		}
+		if let v = wf.aestheticScores {
+			genRows.append(MetadataRow(key: "Scores", value: v, subItems: []))
+		}
 		addSection(title: "ComfyUI: Generation", items: genRows, to: &sections)
 
 		// Prompts section
@@ -288,6 +294,9 @@ struct MetadataPanelView: View {
 		if !wf.randomPrompts.isEmpty {
 			promptRows.append(MetadataRow(key: "Source Prompts", value: "", subItems: wf.randomPrompts))
 		}
+		if let v = wf.promptFile {
+			promptRows.append(MetadataRow(key: "Prompt File", value: v, subItems: []))
+		}
 		if let v = wf.appendText {
 			promptRows.append(MetadataRow(key: "Append Text", value: v, subItems: []))
 		}
@@ -300,6 +309,9 @@ struct MetadataPanelView: View {
 		}
 		if let v = wf.outputDirectory {
 			fileRows.append(MetadataRow(key: "Output Dir", value: v, subItems: []))
+		}
+		if let v = wf.runId {
+			fileRows.append(MetadataRow(key: "Run ID", value: v, subItems: []))
 		}
 		addSection(title: "ComfyUI: File", items: fileRows, to: &sections)
 
