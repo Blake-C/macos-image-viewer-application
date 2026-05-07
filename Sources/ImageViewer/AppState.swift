@@ -579,25 +579,28 @@ final class AppState: ObservableObject {
     func handleThumbnailTap(url: URL, atIndex idx: Int) {
         let cmd   = NSEvent.modifierFlags.contains(.command)
         let shift = NSEvent.modifierFlags.contains(.shift)
+        // Resolve the live index from the URL; fall back to the closure-captured idx only
+        // if the URL isn't in the current array (shouldn't happen, but keeps a safe default).
+        let currentIdx = imageURLs.firstIndex(of: url) ?? idx
 
         if cmd {
             if selectedURLs.contains(url) { selectedURLs.remove(url) }
             else                          { selectedURLs.insert(url) }
-            selectedIndex = idx
+            selectedIndex = currentIdx
         } else if shift, !selectedURLs.isEmpty {
-            let lo = min(selectedIndex, idx)
-            let hi = max(selectedIndex, idx)
+            let lo = min(selectedIndex, currentIdx)
+            let hi = max(selectedIndex, currentIdx)
             let clamped = max(0, lo)...min(imageURLs.count - 1, hi)
             imageURLs[clamped].forEach { selectedURLs.insert($0) }
         } else if !selectedURLs.isEmpty {
             // Plain click while selection exists → clear and navigate
             selectedURLs.removeAll()
             keyboardNavigated = false
-            selectedIndex = idx
+            selectedIndex = currentIdx
         } else {
             // Normal tap — open full image
             keyboardNavigated = false
-            selectedIndex = idx
+            selectedIndex = currentIdx
             enterFullImage()
         }
     }
