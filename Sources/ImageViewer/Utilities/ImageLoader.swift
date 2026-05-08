@@ -7,21 +7,24 @@ import ImageIO
 private final class ThumbnailCacheKey: NSObject {
 	let url: URL
 	let size: CGFloat
+	let modificationDate: Date?
 
-	init(url: URL, size: CGFloat) {
-		self.url  = url
-		self.size = size
+	init(url: URL, size: CGFloat, modificationDate: Date?) {
+		self.url              = url
+		self.size             = size
+		self.modificationDate = modificationDate
 	}
 
 	override func isEqual(_ object: Any?) -> Bool {
 		guard let other = object as? ThumbnailCacheKey else { return false }
-		return url == other.url && size == other.size
+		return url == other.url && size == other.size && modificationDate == other.modificationDate
 	}
 
 	override var hash: Int {
 		var h = Hasher()
 		h.combine(url)
 		h.combine(size)
+		h.combine(modificationDate)
 		return h.finalize()
 	}
 }
@@ -33,12 +36,12 @@ private final class ThumbnailCache: @unchecked Sendable {
 
 	init() { cache.countLimit = 400 }
 
-	func get(_ url: URL, size: CGFloat) -> NSImage? {
-		cache.object(forKey: ThumbnailCacheKey(url: url, size: size))
+	func get(_ url: URL, size: CGFloat, modificationDate: Date?) -> NSImage? {
+		cache.object(forKey: ThumbnailCacheKey(url: url, size: size, modificationDate: modificationDate))
 	}
 
-	func set(_ url: URL, size: CGFloat, image: NSImage) {
-		cache.setObject(image, forKey: ThumbnailCacheKey(url: url, size: size))
+	func set(_ url: URL, size: CGFloat, modificationDate: Date?, image: NSImage) {
+		cache.setObject(image, forKey: ThumbnailCacheKey(url: url, size: size, modificationDate: modificationDate))
 	}
 
 	func removeAll() { cache.removeAllObjects() }
@@ -90,18 +93,19 @@ private final class MetadataCache: @unchecked Sendable {
 
 enum ImageLoader {
 	static func thumbnail(for url: URL, size: CGFloat) async -> NSImage? {
-		if let cached = ThumbnailCache.shared.get(url, size: size) { return cached }
+		let mtime = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+		if let cached = ThumbnailCache.shared.get(url, size: size, modificationDate: mtime) { return cached }
 		return await Task.detached(priority: .userInitiated) {
 			guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
 			let options: [CFString: Any] = [
 				kCGImageSourceThumbnailMaxPixelSize: size,
 				kCGImageSourceCreateThumbnailFromImageAlways: true,
-				kCGImageSourceCreateThumbnailWithTransform: true
+				kCGImageSourceCreateThumbnailWithTransform: true,
 			]
 			guard let cgImg = CGImageSourceCreateThumbnailAtIndex(src, 0, options as CFDictionary)
 			else { return nil }
 			let img = NSImage(cgImage: cgImg, size: NSSize(width: cgImg.width, height: cgImg.height))
-			ThumbnailCache.shared.set(url, size: size, image: img)
+			ThumbnailCache.shared.set(url, size: size, modificationDate: mtime, image: img)
 			return img
 		}.value
 	}
